@@ -33,6 +33,9 @@ h1 { margin: 6px 0 2px; font-size: 44px; font-weight: 700; color: var(--red); }
 .verse span { display: block; margin-top: 4px; }
 
 .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.grid4 .tile b { font-size: 22px; }
+.tile b u { text-decoration: none; color: var(--red); }
 .tile { background: #fff; border: 3px solid var(--line); border-radius: 18px; padding: 10px 8px 8px; }
 .tile b { display: block; font-size: 28px; font-weight: 500; margin-top: 4px; }
 .tile:active, .verse:active, .sound-card:active { transform: scale(.97); }
@@ -78,6 +81,7 @@ h1 { margin: 6px 0 2px; font-size: 44px; font-weight: 700; color: var(--red); }
   .top svg { width: 160px; }
   .verses { grid-template-columns: repeat(2, 1fr); }
   .grid3 { grid-template-columns: repeat(2, 1fr); }
+  .grid4 { grid-template-columns: repeat(2, 1fr); }
   .spy-row { flex-direction: column; align-items: flex-start; }
   .spy-pics { width: 100%; grid-template-columns: repeat(2, 1fr); }
   .book-page figcaption { font-size: 26px; }
@@ -108,6 +112,7 @@ main > .day-nav:last-child { margin-top: 18px; }
 .day-card.review b { font-size: 26px; }
 
 .sound-day { display: grid; grid-template-columns: 1fr 1.4fr; gap: 12px; align-items: start; }
+.sound-day.one { grid-template-columns: minmax(0, 320px); justify-content: center; }
 .sound-day .examples { grid-template-columns: 1fr 1fr; }
 .spy-pics.six { grid-template-columns: repeat(3, 1fr); }
 .tile.hit { border-color: #4cbb6c; background: #eefbf1; position: relative; }

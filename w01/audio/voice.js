@@ -28,10 +28,8 @@ const VOICE_FILES = {
  "apple": "say/apple.m4a",
  "at": "say/at.m4a",
  "bear": "say/bear.m4a",
- "bus": "say/bus.m4a",
  "car": "say/car.m4a",
  "dog": "say/dog.m4a",
- "fire truck": "say/fire-truck.m4a",
  "igloo": "say/igloo.m4a",
  "in": "say/in.m4a",
  "insect": "say/insect.m4a",
@@ -40,12 +38,14 @@ const VOICE_FILES = {
  "nest": "say/nest.m4a",
  "net": "say/net.m4a",
  "nine": "say/nine.m4a",
+ "nut": "say/nut.m4a",
  "pan": "say/pan.m4a",
  "pants": "say/pants.m4a",
  "pig": "say/pig.m4a",
  "pin": "say/pin.m4a",
  "pizza": "say/pizza.m4a",
  "police car": "say/police-car.m4a",
+ "scooter": "say/scooter.m4a",
  "sit": "say/sit.m4a",
  "six": "say/six.m4a",
  "snake": "say/snake.m4a",
@@ -58,6 +58,5 @@ const VOICE_FILES = {
  "tin": "say/tin.m4a",
  "tower": "say/tower.m4a",
  "truck": "say/truck.m4a",
- "van": "say/van.m4a",
- "wheel": "say/wheel.m4a"
+ "van": "say/van.m4a"
 };
