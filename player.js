@@ -1,6 +1,6 @@
 // Tap to hear: the only script on the published page (tools/build_site.py keeps this and drops the drawing code).
-// Anything with data-file="…" plays that recording (the song); data-say="…" plays the recording of that text. All sounds are made by tools/make_sounds.py into the week's
-// audio/ folder: words and sentences (listed in audio/voice.js), letter sounds (sound-x.m4a) and blends
+// Anything with data-file="…" plays that recording (the song); data-say="…" plays the recording of that text;
+// tapping what is playing stops it. All sounds are made by tools/make_sounds.py into the week's audio/ folder: words and sentences (listed in audio/voice.js), letter sounds (sound-x.m4a) and blends
 // (blend-word.m4a). Anything not recorded yet falls back to the device's English voice.
 
 const AUDIO_DIR = 'audio/';
@@ -11,13 +11,26 @@ function pickVoice() {
 }
 if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
 
-// play a list of steps one after another: { file } = an audio clip, { text } = read aloud
-let playId = 0;
-function play(steps) {
-  const id = ++playId;
+// play a list of steps one after another: { file } = an audio clip, { text } = read aloud.
+// Only one thing plays at a time; while it plays its element has the class "is-playing".
+let playId = 0, nowAudio = null, nowEl = null;
+
+function stop() {
+  playId++;
   if ('speechSynthesis' in window) speechSynthesis.cancel();
+  if (nowAudio) nowAudio.pause();
+  if (nowEl) nowEl.classList.remove('is-playing');
+  nowAudio = nowEl = null;
+}
+
+function play(steps, el) {
+  stop();
+  const id = playId;
+  nowEl = el;
+  el.classList.add('is-playing');
   const next = (i) => {
-    if (id !== playId || i >= steps.length) return;
+    if (id !== playId) return;
+    if (i >= steps.length) { stop(); return; }
     const st = steps[i];
     if (st.file) {
       next.file(st.file, i);
@@ -33,6 +46,7 @@ function play(steps) {
   };
   next.file = (file, i) => {
     const a = new Audio(AUDIO_DIR + file);
+    nowAudio = a;
     a.onended = () => next(i + 1);
     a.onerror = () => next(i + 1);
     a.play().catch(() => next(i + 1));
@@ -44,6 +58,7 @@ function onTap(e) {
   // the outer thing wins: a letter inside an I-spy chip or a sound card belongs to that chip / card
   const t = e.target, el = t.closest('[data-file]') || t.closest('[data-spy]') || t.closest('[data-key]') || t.closest('[data-blend]') || t.closest('[data-say]');
   if (!el) return;
+  if (el === nowEl) { stop(); return; }   // tap again to stop (e.g. the song)
   const say = el.dataset.say, single = say && /^[a-z]$/.test(say);
   let steps;
   if (el.dataset.file) steps = [{ file: el.dataset.file }];   // a recording, e.g. the song
@@ -52,9 +67,7 @@ function onTap(e) {
   else if (single && el.dataset.key) steps = [{ file: `sound-${say}.m4a` }, { text: el.dataset.key }];   // "sss … snake"
   else if (single) steps = [{ file: `sound-${say}.m4a` }];
   else steps = [{ text: say }];
-  play(steps);
-  el.classList.add('playing');
-  setTimeout(() => el.classList.remove('playing'), 600);
+  play(steps, el);
 }
 
 document.addEventListener('click', onTap);
