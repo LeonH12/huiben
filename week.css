@@ -87,3 +87,44 @@ h1 { margin: 6px 0 2px; font-size: 44px; font-weight: 700; color: var(--red); }
 /* site home: list of weeks */
 .weeks { display: grid; gap: 12px; }
 .week-link { display: flex; align-items: center; gap: 14px; font-size: 30px; color: inherit; text-decoration: none; padding: 14px 16px; border: 3px solid var(--line); border-radius: 18px; background: #fff; }
+
+/* ---- day pages ---- */
+.day-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0 8px; font-size: 18px; }
+.day-nav a { color: var(--ink); text-decoration: none; font-weight: 700; }
+.day-nav .dots { display: flex; gap: 6px; }
+.day-nav .dots a { width: 34px; height: 34px; border-radius: 50%; border: 2.5px solid var(--ink); display: inline-flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 500; background: #fff; }
+.day-nav .dots a.on { background: var(--red); border-color: var(--red); color: #fff; }
+main > .day-nav:last-child { margin-top: 18px; }
+.day-top svg { width: 130px; }
+.today { font-size: 64px; color: var(--ink); }
+
+.day-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.day-card { position: relative; display: flex; flex-direction: column; align-items: center; text-decoration: none; color: inherit; background: #fffaf0; border: 3px solid var(--line); border-radius: 18px; padding: 26px 8px 10px; }
+.day-card svg { width: 70%; }
+.day-card b { font-size: 40px; font-weight: 500; line-height: 1.1; }
+.day-card .day, .sound-card .day { position: absolute; top: 8px; left: 10px; background: var(--ink); color: #fff; font-size: 13px; border-radius: 10px; padding: 1px 8px; }
+.day-card.review { background: #fff3d6; justify-content: center; }
+.day-card .star { font-size: 64px; color: #f5a524; line-height: 1.2; }
+.day-card.review b { font-size: 26px; }
+
+.sound-day { display: grid; grid-template-columns: 1fr 1.4fr; gap: 12px; align-items: start; }
+.sound-day .examples { grid-template-columns: 1fr 1fr; }
+.spy-pics.six { grid-template-columns: repeat(3, 1fr); }
+.tile.hit { border-color: #4cbb6c; background: #eefbf1; position: relative; }
+.tile.hit::after { content: "✓"; position: absolute; top: 4px; right: 10px; font-size: 30px; color: #2f9e55; font-weight: 700; }
+
+.review-sounds { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 10px; }
+.mini-sound { background: #fffaf0; border: 3px solid var(--line); border-radius: 14px; padding: 4px; }
+.mini-sound b { display: block; font-size: 30px; font-weight: 500; line-height: 1; }
+.review-words { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.review-words .tile { padding: 4px 4px 6px; border-radius: 14px; }
+.review-words .tile b { font-size: 16px; }
+
+@media (max-width: 620px) {
+  .day-grid { grid-template-columns: repeat(2, 1fr); }
+  .sound-day { grid-template-columns: 1fr; }
+  .spy-pics.six { grid-template-columns: repeat(2, 1fr); }
+  .review-sounds { grid-template-columns: repeat(3, 1fr); }
+  .review-words { grid-template-columns: repeat(3, 1fr); }
+  .day-nav .dots a { width: 28px; height: 28px; font-size: 16px; }
+}

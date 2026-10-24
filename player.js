@@ -68,6 +68,7 @@ function onTap(e) {
   else if (single) steps = [{ file: `sound-${say}.m4a` }];
   else steps = [{ text: say }];
   play(steps, el);
+  if (el.hasAttribute('data-hit')) el.classList.add('hit');   // I spy: a right answer turns green
 }
 
 document.addEventListener('click', onTap);
