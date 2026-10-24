@@ -1,0 +1,77 @@
+/* 文字王国 weekly tablet page */
+/* Andika: a reading font with the single-storey "a", for devices that have no Futura (Android, Windows) */
+@font-face { font-family: Andika; src: url("fonts/Andika-Regular.woff2") format("woff2"); font-weight: 400 500; }
+@font-face { font-family: Andika; src: url("fonts/Andika-Bold.woff2") format("woff2"); font-weight: 600 900; }
+:root { --ink: #3a1f0f; --blue: #3b82f6; --red: #e5484d; --paper: #fdf8ef; --card: #ffffff; --line: #eadfcd; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: #2b2b2b; font-family: Futura, Andika, "PingFang SC", sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 16px 16px 60px; }
+svg { display: block; width: 100%; height: auto; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: center; }
+
+.note { font-family: "PingFang SC", sans-serif; font-size: 13px; color: #8a8f99; margin: 2px 0 12px; }
+
+.top { display: flex; align-items: center; gap: 16px; padding: 8px 4px 4px; }
+.top > div { flex: 1; }
+.top svg { width: 260px; flex: none; }
+.wk { display: inline-block; background: var(--ink); color: #fff; border-radius: 20px; padding: 2px 14px; font-size: 15px; }
+h1 { margin: 6px 0 2px; font-size: 44px; font-weight: 700; color: var(--red); }
+
+.sec { background: var(--card); border: 3px solid var(--line); border-radius: 24px; padding: 16px 18px 20px; margin-top: 18px; }
+.sec h2 { margin: 0; font-size: 28px; display: flex; align-items: baseline; gap: 10px; }
+.sec h2 .n { align-self: center; width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 18px; display: inline-flex; align-items: center; justify-content: center; }
+.sec h2 small { font-size: 18px; color: var(--blue); font-weight: 500; }
+.sec h3 { font-size: 22px; margin: 22px 0 8px; }
+
+.big-art { border-radius: 18px; overflow: hidden; }
+.verses { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+.verse { background: #f6f9ff; border-radius: 16px; padding: 8px 8px 10px; font-size: 15px; line-height: 1.35; }
+.verse span { display: block; margin-top: 4px; }
+
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.tile { background: #fff; border: 3px solid var(--line); border-radius: 18px; padding: 10px 8px 8px; }
+.tile b { display: block; font-size: 28px; font-weight: 500; margin-top: 4px; }
+.tile:active, .verse:active, .sound-card:active { transform: scale(.97); }
+[data-say], [data-spy] { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.playing { outline: 4px solid #ffd23f; outline-offset: 2px; border-radius: 18px; }
+
+.spy-row { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.spy-pics { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.spy-pics .tile b { font-size: 18px; color: #9aa0a6; }
+.letter { font-family: Futura, Andika, sans-serif; font-size: 96px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.letter.small { flex: none; width: 92px; height: 92px; font-size: 64px; background: #fff3d6; border: 3px solid var(--ink); border-radius: 20px; padding-bottom: 10px; }
+
+.sound-card { background: #fffaf0; border: 3px solid var(--line); border-radius: 18px; padding: 10px; }
+.sound-card svg { width: 70%; margin: 0 auto; }
+.sound-card .letter { display: block; }
+.sound-card small { font-size: 17px; color: #8a8f99; }
+
+.blend { display: flex; align-items: center; gap: 18px; margin: 10px 0 16px; flex-wrap: wrap; }
+.blend-word { display: flex; gap: 10px; }
+.blend-letter { width: 86px; height: 104px; border: 3px solid var(--ink); border-radius: 16px; background: #fff; font-size: 70px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-bottom: 6px; }
+.blend-letter i { width: 14px; height: 14px; border-radius: 50%; background: var(--red); margin-top: 2px; }
+.blend-arrow { width: 120px; }
+.reveal { position: relative; width: 150px; height: 112px; border: 3px dashed #c8ccd2; border-radius: 16px; background: #f6f7f9; overflow: hidden; }
+.reveal .back { font-size: 56px; color: #b0b5bd; }
+.reveal .front { position: absolute; inset: 0; display: none; background: #fff; padding: 4px; }
+.reveal.open .front { display: block; }
+.reveal.open { border-style: solid; border-color: var(--line); }
+
+.book { display: grid; gap: 16px; }
+.book-page { position: relative; margin: 0; border: 3px solid var(--line); border-radius: 20px; overflow: hidden; background: #fff; }
+.book-page figcaption { font-size: 34px; padding: 10px 18px 14px; text-align: center; }
+.book-page .pg { position: absolute; top: 10px; left: 12px; background: #fff; border: 2px solid var(--ink); border-radius: 12px; font-size: 14px; padding: 0 8px; }
+
+@media (max-width: 620px) {
+  h1 { font-size: 34px; }
+  .top svg { width: 160px; }
+  .verses { grid-template-columns: repeat(2, 1fr); }
+  .grid3 { grid-template-columns: repeat(2, 1fr); }
+  .spy-row { flex-direction: column; align-items: flex-start; }
+  .spy-pics { width: 100%; grid-template-columns: repeat(2, 1fr); }
+  .book-page figcaption { font-size: 26px; }
+}
+
+/* site home: list of weeks */
+.weeks { display: grid; gap: 12px; }
+.week-link { display: flex; align-items: center; gap: 14px; font-size: 30px; color: inherit; text-decoration: none; padding: 14px 16px; border: 3px solid var(--line); border-radius: 18px; background: #fff; }
