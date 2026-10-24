@@ -1,5 +1,5 @@
 // Tap to hear: the only script on the published page (tools/build_site.py keeps this and drops the drawing code).
-// Anything with data-say="…" plays its recording. All sounds are made by tools/make_sounds.py into the week's
+// Anything with data-file="…" plays that recording (the song); data-say="…" plays the recording of that text. All sounds are made by tools/make_sounds.py into the week's
 // audio/ folder: words and sentences (listed in audio/voice.js), letter sounds (sound-x.m4a) and blends
 // (blend-word.m4a). Anything not recorded yet falls back to the device's English voice.
 
@@ -42,11 +42,12 @@ function play(steps) {
 
 function onTap(e) {
   // the outer thing wins: a letter inside an I-spy chip or a sound card belongs to that chip / card
-  const t = e.target, el = t.closest('[data-spy]') || t.closest('[data-key]') || t.closest('[data-blend]') || t.closest('[data-say]');
+  const t = e.target, el = t.closest('[data-file]') || t.closest('[data-spy]') || t.closest('[data-key]') || t.closest('[data-blend]') || t.closest('[data-say]');
   if (!el) return;
   const say = el.dataset.say, single = say && /^[a-z]$/.test(say);
   let steps;
-  if (el.dataset.spy) steps = [{ text: 'I spy something that starts with...' }, { file: `sound-${el.dataset.spy}.m4a` }];
+  if (el.dataset.file) steps = [{ file: el.dataset.file }];   // a recording, e.g. the song
+  else if (el.dataset.spy) steps = [{ text: 'I spy something that starts with...' }, { file: `sound-${el.dataset.spy}.m4a` }];
   else if (el.dataset.blend) steps = [{ file: `blend-${el.dataset.blend}.m4a` }];
   else if (single && el.dataset.key) steps = [{ file: `sound-${say}.m4a` }, { text: el.dataset.key }];   // "sss … snake"
   else if (single) steps = [{ file: `sound-${say}.m4a` }];
