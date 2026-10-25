@@ -69,6 +69,16 @@ function onTap(e) {
   else steps = [{ text: say }];
   play(steps, el);
   if (el.hasAttribute('data-hit')) el.classList.add('hit');   // I spy: a right answer turns green
+  if (el.querySelector('.mv')) act(el);
+}
+
+// an action picture moves once when tapped (week.css: .acting .mv-…), tapping again starts it over
+function act(el) {
+  el.classList.remove('acting');
+  void el.offsetWidth;   // restart the animation
+  el.classList.add('acting');
+  clearTimeout(el.actTimer);
+  el.actTimer = setTimeout(() => el.classList.remove('acting'), 3000);
 }
 
 document.addEventListener('click', onTap);
