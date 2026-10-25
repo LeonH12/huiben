@@ -8,8 +8,9 @@
 // Everything it needs is in the page itself (the published pages have no drawing code):
 //   .pg                    a page; .beat[data-b][data-say] its sentences, .beat.after the ones read after the puzzle
 //   [data-at=k]            a piece of the picture that moves (gets .go) when beat k is read; story.css says how
-//   .puzzle[data-type]     find | fill | seq | sort | choose | path | color, with the picture's [data-find] [data-decoy] [data-slot]
-//                          [data-choice] [data-stone] [data-seg] [data-walker] [data-paint] .drag .bin; .ask = a question with .chip answers
+//   .puzzle[data-type]     find | fill | seq | sort | choose | path | color | mirror, with the picture's [data-find] [data-decoy] [data-slot]
+//                          [data-choice] [data-stone] [data-seg] [data-step] [data-walker] [data-paint] [data-cell] .drag .bin;
+//                          .ask = a question with .chip answers
 
 useVoice('zh-CN', 0.9);   // not recorded yet: the device's Chinese voice
 const takes = () => (typeof VOICE_TAKES !== 'undefined' ? VOICE_TAKES : {});
@@ -149,7 +150,7 @@ function onChip(pg, chip) {
 
 function onFind(pg, t) {
   const pz = P(pg);
-  if ('decoy' in t.dataset) { t.classList.remove('no'); t.getBoundingClientRect(); t.classList.add('no'); return speakThen(pz.dataset.decoySay); }
+  if ('decoy' in t.dataset) { t.classList.remove('no'); t.getBoundingClientRect(); t.classList.add('no'); return speakThen(t.dataset.no || pz.dataset.decoySay); }
   if (t.classList.contains('found')) return;
   t.classList.add('found');
   if (!pg.querySelector('[data-find]:not(.found)')) speakThen(pz.dataset.done, () => openAsk(pg));
@@ -199,6 +200,8 @@ function stepTo(pg, n) {
   hop.classList.remove('hop'); hop.getBoundingClientRect(); hop.classList.add('hop');
   const seg = pg.querySelector(`[data-seg="${n - 1}"]`);
   if (seg) seg.classList.add('on');
+  // the arrow cards of the hops: done ones light up, the next one pulses
+  pg.querySelectorAll('[data-step]').forEach((c) => { const k = +c.dataset.step; c.classList.toggle('on', k <= n); c.classList.toggle('next', k === n + 1); });
   st.classList.add('found');
   w.dataset.at = n;
 }
@@ -211,7 +214,7 @@ function onStone(pg, t) {
     else stop();
   } else if (!t.classList.contains('found')) {
     t.classList.remove('no'); t.getBoundingClientRect(); t.classList.add('no');
-    speakThen(pz.dataset.wrong, () => at && say(`${'一二三四五六七八九'[at - 1]}后面是几？`));
+    speakThen(pz.dataset.wrong, () => at && pz.dataset.next !== '0' && say(`${'一二三四五六七八九'[at - 1]}后面是几？`));
   }
 }
 
@@ -244,7 +247,7 @@ document.addEventListener('pointerdown', (e) => {
   const d = e.target.closest('.drag'), pg = d && d.closest('.pg');
   if (!d || d.classList.contains('placed') || !pg.classList.contains('asking') || pg.classList.contains('solved')) return;
   e.preventDefault();
-  const sc = d.ownerSVGElement;
+  const sc = /** @type {SVGGraphicsElement} */ (d).ownerSVGElement;
   held = { d, pg, sc, from: scenePoint(sc, e) };
   d.classList.add('held');
 });
@@ -265,12 +268,25 @@ const letGo = (e) => {
 document.addEventListener('pointerup', letGo);
 document.addEventListener('pointercancel', letGo);
 
-let paintColor = null;
+// the colour picked on this page (each page has its own palette)
+const chosen = (pg) => /** @type {HTMLElement} */ (P(pg).querySelector('.paint-chip.on')).dataset.color;
 function onPaint(pg, t) {
-  const pz = P(pg);
-  paintColor = paintColor || pz.querySelector('.paint-chip.on').dataset.color;
-  t.querySelectorAll('.paint').forEach((e) => e.setAttribute('fill', paintColor));
+  const pz = P(pg), color = chosen(pg);
+  t.querySelectorAll('.paint').forEach((e) => e.setAttribute('fill', color));
   if (!pg.classList.contains('solved')) speakThen(pz.dataset.done, () => solved(pg));
+}
+// mirror: the picked colour goes into an empty cell only if it is that cell's own colour; every cell filled = solved
+function onCell(pg, t) {
+  const pz = P(pg), color = chosen(pg);
+  if (t.classList.contains('found')) return;
+  if (color !== t.dataset.cell) { t.classList.remove('no'); t.getBoundingClientRect(); t.classList.add('no'); return speakThen(pz.dataset.wrong); }
+  const r = t.querySelector('.paint');
+  r.setAttribute('fill', color);
+  r.removeAttribute('stroke-dasharray');
+  if ('blank' in t.dataset) r.setAttribute('stroke', 'none');   // "no block here": it melts into the door
+  t.classList.add('found');
+  if (!pg.querySelector('[data-cell]:not(.found)')) speakThen(pz.dataset.done, () => solved(pg));
+  else { stop(); say('对啦！'); }
 }
 
 // ---------------- turning pages ----------------
@@ -286,8 +302,8 @@ function show(i) {
   pages[i].classList.add('on');
   cur = i;
   document.querySelectorAll('.dot').forEach((d, k) => { d.classList.toggle('on', k === i); if (k === i) d.classList.add('seen'); });
-  document.querySelector('.pager .prev').disabled = i === 0;
-  document.querySelector('.pager .next').disabled = i === pages.length - 1;
+  /** @type {HTMLButtonElement} */ (document.querySelector('.pager .prev')).disabled = i === 0;
+  /** @type {HTMLButtonElement} */ (document.querySelector('.pager .next')).disabled = i === pages.length - 1;
   document.querySelector('.pager .next').classList.remove('ready');
   pages[i].querySelector('.text').scrollTop = 0;
   if (i > 0) narrate(pages[i]);
@@ -313,7 +329,6 @@ document.addEventListener('click', (e) => {
   if (hit('.seq-chip')) return pg.classList.contains('asking') && onSeq(pg, hit('.seq-chip'));
   if (hit('.paint-chip')) {
     pg.querySelectorAll('.paint-chip').forEach((c) => c.classList.toggle('on', c === hit('.paint-chip')));
-    paintColor = hit('.paint-chip').dataset.color;
     return;
   }
   const tap = hit('.tap');
@@ -323,6 +338,7 @@ document.addEventListener('click', (e) => {
     if ('choice' in tap.dataset) return onChoice(pg, tap);
     if ('stone' in tap.dataset) return onStone(pg, tap);
     if ('paint' in tap.dataset) return onPaint(pg, tap);
+    if ('cell' in tap.dataset) return onCell(pg, tap);
   }
   if (hit('.ask .q')) return speakThen(hit('.ask').dataset.say);
   const beat = hit('.beat');
@@ -335,7 +351,7 @@ document.addEventListener('keydown', (e) => {
 });
 let touchX = null, touchY = null;
 // a swipe turns the page, but not a finger dragging something in a sorting puzzle
-document.addEventListener('touchstart', (e) => { touchX = e.target.closest('.drag') ? null : e.touches[0].clientX; touchY = e.touches[0].clientY; }, { passive: true });
+document.addEventListener('touchstart', (e) => { touchX = /** @type {Element} */ (e.target).closest('.drag') ? null : e.touches[0].clientX; touchY = e.touches[0].clientY; }, { passive: true });
 document.addEventListener('touchend', (e) => {
   if (touchX == null) return;
   const dx = e.changedTouches[0].clientX - touchX, dy = e.changedTouches[0].clientY - touchY;
@@ -344,8 +360,8 @@ document.addEventListener('touchend', (e) => {
 }, { passive: true });
 
 // everyone breathes and blinks in their own time
-document.querySelectorAll('.rig, .rig-head, .rig-eyes, .didi-eyes').forEach((e) => {
+document.querySelectorAll('.rig, .rig-head, .rig-eyes, .didi-eyes').forEach((/** @type {SVGElement} */ e) => {
   e.style.animationDelay = `${-(Math.random() * 6).toFixed(2)}s`;
   if (!e.classList.contains('rig')) e.style.animationDuration = `${(4 + Math.random() * 3).toFixed(2)}s`;
 });
-document.querySelector('.pager .prev').disabled = true;
+/** @type {HTMLButtonElement} */ (document.querySelector('.pager .prev')).disabled = true;

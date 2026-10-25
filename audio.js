@@ -16,6 +16,7 @@ function pickVoice() {
   deviceVoice = vs.find((v) => v.name === voiceName) || vs.find((v) => v.lang === voiceLang)
     || vs.find((v) => v.lang.startsWith(voiceLang.slice(0, 2))) || null;
 }
+/** @param {string} lang e.g. 'zh-CN'  @param {number} rate  @param {string | null} [name] */
 function useVoice(lang, rate, name = null) {
   voiceLang = lang; voiceRate = rate; voiceName = name;
   if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
@@ -51,6 +52,7 @@ const readTime = (text) => (text || '').length * (voiceLang.startsWith('zh') ? 2
 
 // play the sound file given, or the recording of text (the device's voice if it is not recorded yet);
 // resolves true when it ends, false if this play was cancelled
+/** @param {string | null} text  @param {string} [file]  @returns {Promise<boolean>} */
 function say(text, file) {
   const id = playId;
   return new Promise((done) => {
@@ -76,6 +78,7 @@ function say(text, file) {
 
 // play seconds from–to of a long recording (a take: 逻辑世界 reads a page in one go); onTime(t) is called on every
 // frame while it plays. Resolves like say().
+/** @param {string} file  @param {number} from  @param {number} to  @param {(t: number) => void} [onTime]  @returns {Promise<boolean>} */
 function playTake(file, from, to, onTime) {
   const id = playId;
   return new Promise((done) => {

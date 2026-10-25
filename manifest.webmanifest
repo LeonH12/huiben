@@ -1,0 +1,22 @@
+{
+ "name": "绘本世界",
+ "short_name": "绘本世界",
+ "lang": "zh",
+ "start_url": "./",
+ "scope": "./",
+ "display": "standalone",
+ "background_color": "#fdf8ef",
+ "theme_color": "#fdf8ef",
+ "icons": [
+  {
+   "src": "icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png"
+  },
+  {
+   "src": "apple-touch-icon.png",
+   "sizes": "180x180",
+   "type": "image/png"
+  }
+ ]
+}

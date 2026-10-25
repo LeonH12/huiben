@@ -4,10 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="绘本世界">
+<meta name="theme-color" content="#fdf8ef">
+<script>
+if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('../sw.js')
+  .then(() => navigator.serviceWorker.ready).then((r) => r.active.postMessage({ keep: [location.href.split('#')[0],
+    ...[...document.querySelectorAll('link[rel=stylesheet], script[src]')].map((e) => e.href || e.src)] })).catch(() => {}));
+</script>
 <title>Week 1 · Beep Beep!</title>
 <link rel="stylesheet" href="../week.css?v=f0a58aec">
 <script src="audio/voice.js?v=fc616f99"></script>
-<script src="../audio.js?v=ddcdeae2"></script>
+<script src="../audio.js?v=6e4a5f37"></script>
 <script src="../player.js?v=a48fbe49" defer></script>
 </head>
 <body>

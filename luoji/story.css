@@ -129,6 +129,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .lp-peek { animation: catpeek 3.2s ease-in-out infinite; }
 .lp-candle { transform-box: fill-box; transform-origin: 50% 100%; animation: candle .35s ease-in-out infinite alternate; }
 .lp-glint { transform-box: fill-box; transform-origin: 50% 50%; animation: twinkle 1.2s ease-in-out infinite; }
+.lp-spin { animation: spin 2.6s linear infinite; }
+.lp-jitter { animation: jitter .36s ease-in-out infinite; }
 
 .scene .rig { animation: breathe 3.4s ease-in-out infinite; }
 .scene .rig-eyes, .scene .didi-eyes { animation: blink 5s infinite; }
@@ -160,6 +162,10 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 [data-seg].on { stroke-dashoffset: 0; }
 [data-walker] { transition: transform .6s ease-in-out; }
 [data-walker] .hopper.hop { animation: hop .6s ease-out; }
+/* a path's arrow cards: lit once their hop is done, the next one pulses */
+[data-step] .lit { opacity: 0; transition: opacity .3s; }
+[data-step].on .lit { opacity: 1; }
+[data-step].next { transform-box: fill-box; transform-origin: 50% 50%; animation: pulse 1s ease-in-out infinite; }
 .paint { transition: fill .3s; }
 /* sorting: things are dragged by a finger (player.js moves them with transform), a bin lights up while one is over it */
 .scene .drag, .scene .drag * { pointer-events: auto; cursor: grab; touch-action: none; }
@@ -198,6 +204,9 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 @keyframes candle { from { transform: scaleY(.86) rotate(-4deg); } to { transform: scaleY(1.1) rotate(4deg); } }
 @keyframes step { 50% { transform: translateY(-9px); } }
 @keyframes nudge { 50% { transform: translateX(5px); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes jitter { 50% { transform: translateY(-5px); } }
+@keyframes pulse { 50% { transform: scale(1.1); } }
 
 @media (prefers-reduced-motion: reduce) {
   .scene *, .pg { animation-duration: .01s !important; animation-iteration-count: 1 !important; transition-duration: .01s !important; }
