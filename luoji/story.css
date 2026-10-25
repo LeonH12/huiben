@@ -35,7 +35,10 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .btn.big { font-size: 24px; padding: 10px 30px; }
 .btn.small { font-size: 16px; padding: 3px 14px; background: #fff; }
 .btn.is-playing { background: #ffb3a7; }
-.btn.again.is-playing::before { content: "■ "; }
+.btn.again.is-playing::before { content: "🔊 "; }
+/* shown when the browser refused to play: one tap on it starts the page again with sound */
+.sound { display: none; position: absolute; z-index: 5; left: 50%; top: 40%; transform: translateX(-50%); box-shadow: 0 4px 0 var(--ink), 0 10px 40px rgba(0,0,0,.25); }
+.muted .sound { display: block; }
 
 /* ---- puzzles: shown when the reading stops at the puzzle ---- */
 .puzzle { display: none; margin-top: 16px; background: #fffaf0; border: 3px dashed #e6c98f; border-radius: 20px; padding: 10px 14px 14px; }

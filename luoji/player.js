@@ -15,6 +15,8 @@ function pickVoice() {
   zhVoice = vs.find((v) => v.lang === 'zh-CN') || vs.find((v) => v.lang.startsWith('zh')) || null;
 }
 if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+// iPad / iPhone: play like a video, even when the device is on silent
+if (navigator.audioSession) navigator.audioSession.type = 'playback';
 const files = () => (typeof VOICE_FILES !== 'undefined' ? VOICE_FILES : {});
 
 // one thing plays at a time; stop() cancels everything that is waiting
@@ -234,12 +236,13 @@ document.addEventListener('click', (e) => {
   const t = e.target, pg = t.closest('.pg');
   const hit = (sel) => t.closest(sel);
   if (hit('.start')) return show(1);
+  if (hit('.sound')) { document.body.classList.remove('muted'); return cur > 0 && narrate(pages[cur]); }
   if (hit('.home')) return show(0);
   if (hit('.pager .next')) return show(cur + 1);
   if (hit('.pager .prev')) return show(cur - 1);
   if (hit('.dot')) return show(+hit('.dot').dataset.go);
   if (!pg) return;
-  if (hit('.again')) return nowEl === hit('.again') ? stop() : narrate(pg);
+  if (hit('.again')) return narrate(pg);   // always from the first sentence (it used to stop when tapped while reading)
   if (hit('.chip')) return onChip(pg, hit('.chip'));
   if (hit('.add')) return onFill(pg, true);
   if (hit('.hint')) {
