@@ -3,98 +3,18 @@
 // Recordings: audio/voice.js says which text plays which file (VOICE_FILES). A page's sentences may instead be read
 // in one continuous take (VOICE_TAKES: "page|sentence" → [file, start, end] seconds), so the voice flows like a told story;
 // the sentence being read lights up and moves the picture as the take reaches it.
+// The playing itself (one sound at a time, the iPad fixes, takes) is ../shared/audio.js, loaded before this file.
 //
 // Everything it needs is in the page itself (the published pages have no drawing code):
 //   .pg                    a page; .beat[data-b][data-say] its sentences, .beat.after the ones read after the puzzle
 //   [data-at=k]            a piece of the picture that moves (gets .go) when beat k is read; story.css says how
-//   .puzzle[data-type]     find | fill | choose | path | color, with the picture's [data-find] [data-decoy] [data-slot]
-//                          [data-choice] [data-stone] [data-seg] [data-walker] [data-paint]; .ask = a question with .chip answers
+//   .puzzle[data-type]     find | fill | seq | sort | choose | path | color, with the picture's [data-find] [data-decoy] [data-slot]
+//                          [data-choice] [data-stone] [data-seg] [data-walker] [data-paint] .drag .bin; .ask = a question with .chip answers
 
-const AUDIO_DIR = 'audio/';
-let zhVoice = null;
-function pickVoice() {
-  const vs = speechSynthesis.getVoices();
-  zhVoice = vs.find((v) => v.lang === 'zh-CN') || vs.find((v) => v.lang.startsWith('zh')) || null;
-}
-if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
-// iPad / iPhone: play like a video, even when the device is on silent
-if (navigator.audioSession) navigator.audioSession.type = 'playback';
-const files = () => (typeof VOICE_FILES !== 'undefined' ? VOICE_FILES : {});
+useVoice('zh-CN', 0.9);   // not recorded yet: the device's Chinese voice
 const takes = () => (typeof VOICE_TAKES !== 'undefined' ? VOICE_TAKES : {});
 const takeOf = (el) => takes()[`${el.closest('.pg').dataset.pg}|${el.dataset.say}`];
-
-// one thing plays at a time; stop() cancels everything that is waiting
-let playId = 0, nowAudio = null, nowEl = null, audioEl = null;
-function stop() {
-  playId++;
-  if ('speechSynthesis' in window) speechSynthesis.cancel();
-  if (nowAudio) nowAudio.pause();
-  if (nowEl) nowEl.classList.remove('is-playing');
-  document.querySelectorAll('.beat.on').forEach((e) => e.classList.remove('on'));
-  nowAudio = nowEl = null;
-}
-// the browser refused to play without a tap: show the sound button (an AbortError only means a page was turned mid-play)
-const blocked = (e) => { if (e && e.name === 'NotAllowedError') document.body.classList.add('muted'); };
-// play a recorded text (or the sound file given); resolves true when it ends, false if this play was cancelled
-function say(text, sound) {
-  const id = playId;
-  return new Promise((done) => {
-    if (id !== playId || !text) return done(id === playId);
-    const file = sound || files()[text];
-    if (file) {
-      // one element for everything: once a tap has played it, Safari lets it play on its own afterwards
-      const a = audioEl || (audioEl = new Audio());
-      a.src = AUDIO_DIR + file;
-      a.muted = false; a.onseeked = a.onloadedmetadata = null;   // left over from a take
-      nowAudio = a;
-      a.onended = a.onerror = () => done(id === playId);
-      // playing refused (the browser wants a tap first): show the sound button, and still wait about as long as
-      // the sentence, so the picture keeps the pace of the story
-      a.play().then(() => document.body.classList.remove('muted'))
-        .catch((e) => { blocked(e); setTimeout(() => done(id === playId), 250 * text.length); });
-    } else {   // not recorded yet: the device's Chinese voice
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'zh-CN'; u.rate = 0.9;
-      if (zhVoice) u.voice = zhVoice;
-      u.onend = u.onerror = () => done(id === playId);
-      speechSynthesis.speak(u);
-    }
-  });
-}
-// play seconds from–to of a take; onTime(t) is called on every frame while it plays
-function playTake(file, from, to, onTime) {
-  const id = playId;
-  return new Promise((done) => {
-    if (id !== playId) return done(false);
-    const a = audioEl || (audioEl = new Audio());
-    // jump to `from` ourselves (a "#t=from,to" address stops Chrome about a second after a mid-file start);
-    // until the jump lands the element stays muted, so the start of the take is never heard
-    const url = new URL(AUDIO_DIR + file, location.href).href;
-    if (a.src !== url) a.src = url;
-    const seek = () => { if (Math.abs(a.currentTime - from) > 0.05) a.currentTime = from; else a.muted = false; };
-    a.muted = from > 0.05;
-    a.onseeked = () => { a.muted = false; };
-    if (a.readyState >= 1) seek(); else a.onloadedmetadata = seek;
-    nowAudio = a;
-    let over = false;
-    const finish = (ok) => { if (!over) { over = true; done(ok && id === playId); } };
-    const tick = () => {
-      if (over) return;
-      if (id !== playId) return finish(false);
-      const t = a.currentTime;
-      if (t >= from - 0.1) {   // not before the jump has landed
-        if (onTime) onTime(t);
-        if (a.ended || t >= to - 0.03) { a.pause(); return finish(true); }
-      }
-      requestAnimationFrame(tick);
-    };
-    a.onended = a.onerror = () => finish(true);
-    a.play().then(() => { document.body.classList.remove('muted'); requestAnimationFrame(tick); })
-      .catch((e) => { blocked(e); setTimeout(() => finish(true), (to - from) * 1000); });
-  });
-}
-const pause = (ms) => { const id = playId; return new Promise((r) => setTimeout(() => r(id === playId), ms)); };
-const hidden = (pg, sel) => pg.querySelector(sel);
+onStop.push(() => document.querySelectorAll('.beat.on').forEach((e) => e.classList.remove('on')));
 
 // ---------------- the picture ----------------
 function resetScene(pg) {
@@ -220,10 +140,10 @@ function onChip(pg, chip) {
   if (!ask.classList.contains('on')) return;   // already answered
   if ('ok' in chip.dataset) {
     chip.classList.add('right'); ask.classList.add('ok'); ask.classList.remove('on');
-    speakThen(hidden(pg, '[data-say="对啦！"]').dataset.say, () => openAsk(pg));
+    speakThen('对啦！', () => openAsk(pg));
   } else {
     chip.classList.remove('no'); chip.getBoundingClientRect(); chip.classList.add('no');
-    speakThen(hidden(pg, '[data-say="再数一数。"]').dataset.say);
+    speakThen('再数一数。');
   }
 }
 
@@ -295,6 +215,56 @@ function onStone(pg, t) {
   }
 }
 
+// sorting: a finger drags a .drag over a .bin; dropped on the bin with its own value it settles in the bin's next slot,
+// anywhere else it goes back home (on a wrong bin the voice says which feature does not match)
+let held = null;
+const scenePoint = (svgEl, e) => new DOMPoint(e.clientX, e.clientY).matrixTransform(svgEl.getScreenCTM().inverse());
+function binAt(pg, p) {
+  return [...pg.querySelectorAll('.bin')].find((b) => { const [x, y, w, h] = b.dataset.box.split(',').map(Number); return p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + h; });
+}
+function onSortDrop(pg, d, b) {
+  const pz = P(pg), want = d.dataset.drag;
+  if (!b) { d.style.transform = ''; return; }
+  const got = b.dataset.bin;
+  if (got !== want) {
+    d.style.transform = '';
+    if (d.dataset.no) return speakThen(d.dataset.no);
+    const i = [...want].findIndex((c, k) => c !== got[k]);
+    return speakThen(pz.dataset.wrong.split('|')[i]);
+  }
+  const n = pg.querySelectorAll(`.drag.placed[data-in="${got}"]`).length;
+  const [sx, sy] = b.dataset.slots.split(' ')[n].split(',').map(Number);
+  d.style.transform = `translate(${sx - d.dataset.x}px, ${sy - d.dataset.y}px)`;
+  d.classList.add('placed');
+  d.dataset.in = got;
+  if (!pg.querySelector('.drag:not(.placed)')) speakThen(pz.dataset.done, () => solved(pg));
+  else { stop(); say('对啦！'); }
+}
+document.addEventListener('pointerdown', (e) => {
+  const d = e.target.closest('.drag'), pg = d && d.closest('.pg');
+  if (!d || d.classList.contains('placed') || !pg.classList.contains('asking') || pg.classList.contains('solved')) return;
+  e.preventDefault();
+  const sc = d.ownerSVGElement;
+  held = { d, pg, sc, from: scenePoint(sc, e) };
+  d.classList.add('held');
+});
+document.addEventListener('pointermove', (e) => {
+  if (!held) return;
+  const p = scenePoint(held.sc, e), b = binAt(held.pg, p);
+  held.d.style.transform = `translate(${p.x - held.from.x}px, ${p.y - held.from.y}px)`;
+  held.pg.querySelectorAll('.bin').forEach((x) => x.classList.toggle('over', x === b));
+});
+const letGo = (e) => {
+  if (!held) return;
+  const { d, pg, sc } = held, b = e.type === 'pointerup' && binAt(pg, scenePoint(sc, e));
+  held = null;
+  d.classList.remove('held');
+  pg.querySelectorAll('.bin.over').forEach((x) => x.classList.remove('over'));
+  onSortDrop(pg, d, b);
+};
+document.addEventListener('pointerup', letGo);
+document.addEventListener('pointercancel', letGo);
+
 let paintColor = null;
 function onPaint(pg, t) {
   const pz = P(pg);
@@ -364,7 +334,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft') show(cur - 1);
 });
 let touchX = null, touchY = null;
-document.addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; touchY = e.touches[0].clientY; }, { passive: true });
+// a swipe turns the page, but not a finger dragging something in a sorting puzzle
+document.addEventListener('touchstart', (e) => { touchX = e.target.closest('.drag') ? null : e.touches[0].clientX; touchY = e.touches[0].clientY; }, { passive: true });
 document.addEventListener('touchend', (e) => {
   if (touchX == null) return;
   const dx = e.changedTouches[0].clientX - touchX, dy = e.changedTouches[0].clientY - touchY;

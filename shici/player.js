@@ -11,53 +11,19 @@
 //   .hide-level[data-level=N]      遮字背: hides the characters with class hN in the .recite block; tap one to see it
 // A scene is an <svg class="scene" data-line=L>; it gets the classes c0, c1, c2… as chunk 0, 1, 2… is read
 // (poem.css turns those into the movement), and "done" when the line is over.
+// The playing itself (one sound at a time, the iPad fixes) is ../shared/audio.js, loaded before this file.
 
-const AUDIO_DIR = 'audio/';
-let zhVoice = null;
-function pickVoice() {
-  const vs = speechSynthesis.getVoices();
-  zhVoice = vs.find((v) => v.lang === 'zh-CN') || vs.find((v) => v.lang.startsWith('zh')) || null;
-}
-if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
-
-const files = () => (typeof VOICE_FILES !== 'undefined' ? VOICE_FILES : {});
+useVoice('zh-CN', 0.8);   // not recorded yet: the device's Chinese voice, a little slower for poems
 const marks = () => (typeof VOICE_MARKS !== 'undefined' ? VOICE_MARKS : {});
 
-// one thing plays at a time; stop() cancels everything that is waiting
-let playId = 0, nowAudio = null, nowEl = null, timers = [];
-function stop() {
-  playId++;
+// the timers of the lit-up chunks and the moving scenes stop with the sound
+let timers = [];
+onStop.push(() => {
   timers.forEach(clearTimeout);
   timers = [];
-  if ('speechSynthesis' in window) speechSynthesis.cancel();
-  if (nowAudio) nowAudio.pause();
-  if (nowEl) nowEl.classList.remove('is-playing');
   document.querySelectorAll('.chunk.on, .song-line.on').forEach((e) => e.classList.remove('on'));
-  nowAudio = nowEl = null;
-}
+});
 const later = (ms, fn) => timers.push(setTimeout(fn, ms));
-
-// play a file or a recorded text; resolves when it ends (or right away if this play was cancelled)
-function sound(textOrFile, isFile = false) {
-  const id = playId;
-  return new Promise((done) => {
-    if (id !== playId) return done(false);
-    const file = isFile ? textOrFile : files()[textOrFile];
-    if (file) {
-      const a = new Audio(AUDIO_DIR + file);
-      nowAudio = a;
-      a.onended = () => done(id === playId);
-      a.onerror = () => done(id === playId);
-      a.play().catch(() => done(id === playId));
-    } else {   // not recorded yet: the device's Chinese voice
-      const u = new SpeechSynthesisUtterance(textOrFile);
-      u.lang = 'zh-CN'; u.rate = 0.8;
-      if (zhVoice) u.voice = zhVoice;
-      u.onend = () => done(id === playId);
-      speechSynthesis.speak(u);
-    }
-  });
-}
 
 // put a scene back to its start, without the movement showing
 function resetScene(svgEl) {
@@ -79,7 +45,7 @@ async function playLine(stage, L) {
     chunks.forEach((c) => c.classList.toggle('on', +c.dataset.i === i));
     if (scene) scene.classList.add(`c${i}`);
   }));
-  const ok = await sound(text);
+  const ok = await say(text);
   chunks.forEach((c) => c.classList.remove('on'));
   if (ok && scene) scene.classList.add('done');
   return ok;
@@ -90,13 +56,12 @@ async function playPoem(stage, btn) {
   const id = playId;
   nowEl = btn; btn.classList.add('is-playing');
   stage.querySelectorAll('svg.scene').forEach(resetScene);
-  if (!(await sound(btn.dataset.title))) return;
+  if (!(await say(btn.dataset.title))) return;
   const lines = [...new Set([...stage.querySelectorAll('.verse[data-line]')].map((v) => +v.dataset.line))];
   for (const L of lines) {
     const card = stage.querySelector(`.line-card[data-line="${L}"]`);
     if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    await new Promise((r) => setTimeout(r, 350));
-    if (id !== playId || !(await playLine(stage, L))) return;
+    if (!(await pause(350)) || !(await playLine(stage, L))) return;
   }
   stop();
 }
@@ -106,8 +71,7 @@ function playSong(stage, btn) {
   stop();
   const id = playId, cues = JSON.parse(btn.dataset.cues);
   nowEl = btn; btn.classList.add('is-playing');
-  const a = new Audio(AUDIO_DIR + btn.dataset.file);
-  nowAudio = a;
+  const a = audioEl;
   const scenes = [...stage.querySelectorAll('svg.scene')], lines = [...stage.querySelectorAll('.song-line')];
   let shown = -1;
   const show = (k) => {
@@ -126,8 +90,9 @@ function playSong(stage, btn) {
     if (k !== shown && k >= 0) { shown = k; show(k); }
     requestAnimationFrame(tick);
   };
-  a.onended = () => { if (id === playId) stop(); };
-  a.play().then(tick).catch(stop);
+  // the scenes start moving when the song does (a "playing" left over from a refused start finds this play cancelled)
+  a.addEventListener('playing', tick, { once: true });
+  say(null, btn.dataset.file).then((ok) => { if (ok) stop(); });
 }
 
 document.addEventListener('click', (e) => {
@@ -153,6 +118,6 @@ document.addEventListener('click', (e) => {
   stop();
   nowEl = el; el.classList.add('is-playing');
   const run = el.classList.contains('play-line') ? playLine(stage, +el.dataset.line)
-    : el.dataset.file ? sound(el.dataset.file, true) : sound(el.dataset.say);
+    : el.dataset.file ? say(null, el.dataset.file) : say(el.dataset.say);
   run.then((ok) => { if (ok) stop(); });
 });

@@ -1,57 +1,22 @@
-// Tap to hear: the only script on the published page (tools/build_site.py keeps this and drops the drawing code).
+// Tap to hear: with ../shared/audio.js (which does the playing) the only script on the published page
+// (tools/build_site.py keeps these and drops the drawing code).
 // Anything with data-file="…" plays that recording (the song); data-say="…" plays the recording of that text;
 // tapping what is playing stops it. All sounds are made by tools/make_sounds.py into the week's audio/ folder: words and sentences (listed in audio/voice.js), letter sounds (sound-x.m4a) and blends
 // (blend-word.m4a). Anything not recorded yet falls back to the device's English voice.
 
-const AUDIO_DIR = 'audio/';
-let englishVoice = null;
-function pickVoice() {
-  const vs = speechSynthesis.getVoices();
-  englishVoice = vs.find((v) => v.name === 'Samantha') || vs.find((v) => v.lang === 'en-US') || vs.find((v) => v.lang.startsWith('en')) || null;
-}
-if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+useVoice('en-US', 0.8, 'Samantha');
 
-// play a list of steps one after another: { file } = an audio clip, { text } = read aloud.
-// Only one thing plays at a time; while it plays its element has the class "is-playing".
-let playId = 0, nowAudio = null, nowEl = null;
-
-function stop() {
-  playId++;
-  if ('speechSynthesis' in window) speechSynthesis.cancel();
-  if (nowAudio) nowAudio.pause();
-  if (nowEl) nowEl.classList.remove('is-playing');
-  nowAudio = nowEl = null;
-}
-
-function play(steps, el) {
+// play a list of steps one after another: { file } = an audio clip, { text } = the recording of that text, or read
+// aloud by the device. Only one thing plays at a time; while it plays its element has the class "is-playing".
+async function play(steps, el) {
   stop();
-  const id = playId;
   nowEl = el;
   el.classList.add('is-playing');
-  const next = (i) => {
-    if (id !== playId) return;
-    if (i >= steps.length) { stop(); return; }
-    const st = steps[i];
-    if (st.file) {
-      next.file(st.file, i);
-    } else if (typeof VOICE_FILES !== 'undefined' && VOICE_FILES[st.text]) {
-      next.file(VOICE_FILES[st.text], i);
-    } else {
-      const u = new SpeechSynthesisUtterance(st.text);
-      u.lang = 'en-US'; u.rate = 0.8;
-      if (englishVoice) u.voice = englishVoice;
-      u.onend = () => setTimeout(() => next(i + 1), 150);
-      speechSynthesis.speak(u);
-    }
-  };
-  next.file = (file, i) => {
-    const a = new Audio(AUDIO_DIR + file);
-    nowAudio = a;
-    a.onended = () => next(i + 1);
-    a.onerror = () => next(i + 1);
-    a.play().catch(() => next(i + 1));
-  };
-  next(0);
+  for (const st of steps) {
+    const spoken = !st.file && !files()[st.text];   // the device's voice: a short breath after it
+    if (!(await say(st.text, st.file)) || spoken && !(await pause(150))) return;
+  }
+  stop();
 }
 
 function onTap(e) {
@@ -59,14 +24,14 @@ function onTap(e) {
   const t = e.target, el = t.closest('[data-file]') || t.closest('[data-spy]') || t.closest('[data-key]') || t.closest('[data-blend]') || t.closest('[data-say]');
   if (!el) return;
   if (el === nowEl) { stop(); return; }   // tap again to stop (e.g. the song)
-  const say = el.dataset.say, single = say && /^[a-z]$/.test(say);
+  const txt = el.dataset.say, single = txt && /^[a-z]$/.test(txt);
   let steps;
   if (el.dataset.file) steps = [{ file: el.dataset.file }];   // a recording, e.g. the song
   else if (el.dataset.spy) steps = [{ text: 'I spy something that starts with...' }, { file: `sound-${el.dataset.spy}.m4a` }];
   else if (el.dataset.blend) steps = [{ file: `blend-${el.dataset.blend}.m4a` }];
-  else if (single && el.dataset.key) steps = [{ file: `sound-${say}.m4a` }, { text: el.dataset.key }];   // "sss … snake"
-  else if (single) steps = [{ file: `sound-${say}.m4a` }];
-  else steps = [{ text: say }];
+  else if (single && el.dataset.key) steps = [{ file: `sound-${txt}.m4a` }, { text: el.dataset.key }];   // "sss … snake"
+  else if (single) steps = [{ file: `sound-${txt}.m4a` }];
+  else steps = [{ text: txt }];
   play(steps, el);
   if (el.hasAttribute('data-hit')) el.classList.add('hit');   // I spy: a right answer turns green
   if (el.querySelector('.mv')) act(el);

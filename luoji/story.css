@@ -161,6 +161,16 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 [data-walker] { transition: transform .6s ease-in-out; }
 [data-walker] .hopper.hop { animation: hop .6s ease-out; }
 .paint { transition: fill .3s; }
+/* sorting: things are dragged by a finger (player.js moves them with transform), a bin lights up while one is over it */
+.scene .drag, .scene .drag * { pointer-events: auto; cursor: grab; touch-action: none; }
+.drag { transition: transform .35s ease-out; }
+.drag.held { transition: none; cursor: grabbing; }
+.drag.held .lift { transform-box: fill-box; transform-origin: 50% 50%; transform: scale(1.15); filter: drop-shadow(0 6px 4px rgba(0,0,0,.25)); }
+.drag.placed, .drag.placed * { pointer-events: none; }
+.drag.placed .lift { animation: hop .5s ease-out; }
+.bin .bin-bg { transition: fill .2s; }
+.bin.over .bin-bg { fill: #fff3b0; }
+.hinting .drag:not(.placed) .lift { transform-box: fill-box; transform-origin: 50% 50%; animation: wiggle .5s ease-in-out 3; }
 [data-choice].found > .card { stroke: var(--red); stroke-width: 7; }
 
 @keyframes breathe { 50% { transform: scale(1.012, .99); } }
