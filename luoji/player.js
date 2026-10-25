@@ -33,6 +33,8 @@ function stop() {
   document.querySelectorAll('.beat.on').forEach((e) => e.classList.remove('on'));
   nowAudio = nowEl = null;
 }
+// the browser refused to play without a tap: show the sound button (an AbortError only means a page was turned mid-play)
+const blocked = (e) => { if (e && e.name === 'NotAllowedError') document.body.classList.add('muted'); };
 // play a recorded text; resolves true when it ends, false if this play was cancelled
 function say(text) {
   const id = playId;
@@ -43,12 +45,13 @@ function say(text) {
       // one element for everything: once a tap has played it, Safari lets it play on its own afterwards
       const a = audioEl || (audioEl = new Audio());
       a.src = AUDIO_DIR + file;
+      a.muted = false; a.onseeked = a.onloadedmetadata = null;   // left over from a take
       nowAudio = a;
       a.onended = a.onerror = () => done(id === playId);
       // playing refused (the browser wants a tap first): show the sound button, and still wait about as long as
       // the sentence, so the picture keeps the pace of the story
       a.play().then(() => document.body.classList.remove('muted'))
-        .catch(() => { document.body.classList.add('muted'); setTimeout(() => done(id === playId), 250 * text.length); });
+        .catch((e) => { blocked(e); setTimeout(() => done(id === playId), 250 * text.length); });
     } else {   // not recorded yet: the device's Chinese voice
       const u = new SpeechSynthesisUtterance(text);
       u.lang = 'zh-CN'; u.rate = 0.9;
@@ -64,20 +67,30 @@ function playTake(file, from, to, onTime) {
   return new Promise((done) => {
     if (id !== playId) return done(false);
     const a = audioEl || (audioEl = new Audio());
-    a.src = `${AUDIO_DIR}${file}#t=${from},${to}`;
+    // jump to `from` ourselves (a "#t=from,to" address stops Chrome about a second after a mid-file start);
+    // until the jump lands the element stays muted, so the start of the take is never heard
+    const url = new URL(AUDIO_DIR + file, location.href).href;
+    if (a.src !== url) a.src = url;
+    const seek = () => { if (Math.abs(a.currentTime - from) > 0.05) a.currentTime = from; else a.muted = false; };
+    a.muted = from > 0.05;
+    a.onseeked = () => { a.muted = false; };
+    if (a.readyState >= 1) seek(); else a.onloadedmetadata = seek;
     nowAudio = a;
     let over = false;
     const finish = (ok) => { if (!over) { over = true; done(ok && id === playId); } };
     const tick = () => {
       if (over) return;
       if (id !== playId) return finish(false);
-      if (onTime) onTime(a.currentTime);
-      if (a.ended || a.currentTime >= to - 0.03) { a.pause(); return finish(true); }
+      const t = a.currentTime;
+      if (t >= from - 0.1) {   // not before the jump has landed
+        if (onTime) onTime(t);
+        if (a.ended || t >= to - 0.03) { a.pause(); return finish(true); }
+      }
       requestAnimationFrame(tick);
     };
     a.onended = a.onerror = () => finish(true);
     a.play().then(() => { document.body.classList.remove('muted'); requestAnimationFrame(tick); })
-      .catch(() => { document.body.classList.add('muted'); setTimeout(() => finish(true), (to - from) * 1000); });
+      .catch((e) => { blocked(e); setTimeout(() => finish(true), (to - from) * 1000); });
   });
 }
 const pause = (ms) => { const id = playId; return new Promise((r) => setTimeout(() => r(id === playId), ms)); };
