@@ -100,8 +100,11 @@ h1 { margin: 6px 0 2px; font-size: 44px; font-weight: 700; color: var(--red); }
 .day-nav .dots a { width: 34px; height: 34px; border-radius: 50%; border: 2.5px solid var(--ink); display: inline-flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 500; background: #fff; }
 .day-nav .dots a.on { background: var(--red); border-color: var(--red); color: #fff; }
 main > .day-nav:last-child { margin-top: 18px; }
-.day-top svg { width: 130px; }
-.today { font-size: 64px; color: var(--ink); }
+.day-top { height: 150px; }   /* same height every day, so the page doesn't jump between days */
+.day-top svg { width: 130px; height: 130px; }
+.day-top h1 { line-height: 76px; }
+.today { font-size: 64px; color: var(--ink); line-height: 1; }
+.today.star { color: #f5a524; }
 
 .day-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .day-card { position: relative; display: flex; flex-direction: column; align-items: center; text-decoration: none; color: inherit; background: #fffaf0; border: 3px solid var(--line); border-radius: 18px; padding: 26px 8px 10px; }
@@ -134,3 +137,31 @@ main > .day-nav:last-child { margin-top: 18px; }
   .review-words { grid-template-columns: repeat(3, 1fr); }
   .day-nav .dots a { width: 28px; height: 28px; font-size: 16px; }
 }
+
+/* ---- action pictures move a little (the moving part is <g class="mv mv-…">) ---- */
+.mv { transform-box: fill-box; transform-origin: 50% 50%; animation-iteration-count: infinite; animation-timing-function: ease-in-out; }
+.mv-stop { animation: mv-stop 3s infinite ease-out; }
+@keyframes mv-stop { 0% { transform: translateX(-70px); } 45%, 100% { transform: translateX(0); } }
+.mv-slow { animation: mv-slow 5s infinite ease-in-out alternate; }
+@keyframes mv-slow { from { transform: translateX(-12px); } to { transform: translateX(12px); } }
+.mv-spin { animation: mv-spin 3s infinite ease-in-out; }
+@keyframes mv-spin { 0%, 20% { transform: rotate(0); } 80%, 100% { transform: rotate(360deg); } }
+.mv-sit { animation: mv-sit 2.6s infinite ease-out; }
+@keyframes mv-sit { 0% { transform: translateY(-22px); } 40%, 100% { transform: translateY(0); } }
+.mv-stand { animation: mv-stand 2.6s infinite ease-out; }
+@keyframes mv-stand { 0% { transform: translateY(20px) scaleY(.9); } 40%, 100% { transform: translateY(0) scaleY(1); } }
+.mv-turn { animation: mv-turn 3s infinite ease-out; }
+@keyframes mv-turn { 0% { transform: translate(-90px, -40px) rotate(-30deg); opacity: 0; } 15% { opacity: 1; } 55%, 100% { transform: translate(0, 0) rotate(0); } }
+.mv-tiptoe { animation: mv-tiptoe 1.4s infinite ease-in-out alternate; }
+@keyframes mv-tiptoe { from { transform: translateY(6px); } to { transform: translateY(-6px); } }
+.mv-push, .mv-pull { animation: mv-push 1.6s infinite ease-in-out alternate; }
+@keyframes mv-push { from { transform: translateX(-8px); } to { transform: translateX(10px); } }
+.mv-park { animation: mv-park 3s infinite ease-out; }
+@keyframes mv-park { 0% { transform: translateY(70px); } 50%, 100% { transform: translateY(0); } }
+.mv-twinkle { animation: mv-twinkle 1.2s infinite ease-in-out alternate; }
+@keyframes mv-twinkle { from { transform: scale(.6); opacity: .6; } to { transform: scale(1.25); opacity: 1; } }
+.mv-nod { transform-origin: 50% 100%; animation: mv-nod 1.2s infinite ease-in-out alternate; }
+@keyframes mv-nod { from { transform: rotate(-4deg); } to { transform: rotate(5deg); } }
+.mv-nap { transform-origin: 50% 100%; animation: mv-nap 3s infinite ease-in-out alternate; }
+@keyframes mv-nap { from { transform: scale(1); } to { transform: scale(1.04); } }
+@media (prefers-reduced-motion: reduce) { .mv { animation: none !important; } }
