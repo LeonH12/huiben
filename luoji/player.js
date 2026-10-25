@@ -35,12 +35,12 @@ function stop() {
 }
 // the browser refused to play without a tap: show the sound button (an AbortError only means a page was turned mid-play)
 const blocked = (e) => { if (e && e.name === 'NotAllowedError') document.body.classList.add('muted'); };
-// play a recorded text; resolves true when it ends, false if this play was cancelled
-function say(text) {
+// play a recorded text (or the sound file given); resolves true when it ends, false if this play was cancelled
+function say(text, sound) {
   const id = playId;
   return new Promise((done) => {
     if (id !== playId || !text) return done(id === playId);
-    const file = files()[text];
+    const file = sound || files()[text];
     if (file) {
       // one element for everything: once a tap has played it, Safari lets it play on its own afterwards
       const a = audioEl || (audioEl = new Audio());
@@ -125,7 +125,7 @@ const breath = (t) => (/……[”"]?$/.test(t) ? 800 : /[。！？][”"]?$/.te
 async function readBeat(pg, el) {
   mark(pg, el);
   const tk = takeOf(el);
-  const ok = await (tk ? playTake(...tk) : say(el.dataset.say));
+  const ok = await (tk ? playTake(...tk) : say(el.dataset.say, el.dataset.file));
   el.classList.remove('on');
   return ok;
 }
@@ -182,11 +182,18 @@ function startPuzzle(pg) {
   const type = pz.dataset.type;
   if (pz.dataset.started) return;
   pz.dataset.started = '1';
-  if (type === 'find') {   // show how: the first apple gets its ring
+  if (type === 'find' && pz.dataset.demo) {   // show how: the first one gets its ring
     const first = pg.querySelector('[data-find]');
     stop();
     say(pz.dataset.demo);
     setTimeout(() => first.classList.add('found'), 1200);
+  }
+  if (type === 'seq') {
+    nextSeq(pg);
+    if (pz.dataset.demo) {   // show how: the first empty place is filled for the child
+      stop();
+      say(pz.dataset.demo).then((ok) => { if (ok) { pg.querySelector('[data-seq]').classList.add('filled'); nextSeq(pg); } });
+    }
   }
   if (type === 'path') {   // show how: the first step onto stone 1
     stop();
@@ -226,6 +233,25 @@ function onFind(pg, t) {
   if (t.classList.contains('found')) return;
   t.classList.add('found');
   if (!pg.querySelector('[data-find]:not(.found)')) speakThen(pz.dataset.done, () => openAsk(pg));
+}
+
+// pattern puzzle: the next empty place pulses; a chip fills it if it is what the pattern needs
+function nextSeq(pg) {
+  const slots = [...pg.querySelectorAll('[data-seq]')], next = slots.find((s) => !s.classList.contains('filled'));
+  slots.forEach((s) => s.classList.toggle('next', s === next));
+  return next;
+}
+function onSeq(pg, chip) {
+  const pz = P(pg), next = nextSeq(pg);
+  if (!next) return;
+  if (chip.dataset.v === next.dataset.seq) {
+    next.classList.add('filled');
+    if (!nextSeq(pg)) speakThen(pz.dataset.done, () => solved(pg));
+    else { stop(); say(chip.dataset.say, chip.dataset.file); }
+  } else {
+    chip.classList.remove('no'); chip.getBoundingClientRect(); chip.classList.add('no');
+    speakThen(pz.dataset.wrong);
+  }
 }
 
 function onFill(pg, add) {
@@ -314,6 +340,7 @@ document.addEventListener('click', (e) => {
     pg.classList.add('hinting'); setTimeout(() => pg.classList.remove('hinting'), 1600);
     return speakThen(hit('.hint').dataset.say);
   }
+  if (hit('.seq-chip')) return pg.classList.contains('asking') && onSeq(pg, hit('.seq-chip'));
   if (hit('.paint-chip')) {
     pg.querySelectorAll('.paint-chip').forEach((c) => c.classList.toggle('on', c === hit('.paint-chip')));
     paintColor = hit('.paint-chip').dataset.color;

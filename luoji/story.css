@@ -138,6 +138,18 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* puzzle pieces */
 .ring { stroke-dasharray: 100; stroke-dashoffset: 100; opacity: 0; }
+/* a piece that is wrong until it is found: its .fixed layer shows the right one */
+.tap .fixed { opacity: 0; transition: opacity .4s; }
+.tap.found .fixed { opacity: 1; }
+/* pattern places: an empty pot / bud that pulses when it is next, the flower pops in when filled */
+[data-seq] .bloom { transform-box: fill-box; transform-origin: 50% 100%; transform: scale(0); transition: transform .45s cubic-bezier(.3, 1.6, .5, 1); }
+[data-seq].filled .bloom { transform: none; }
+[data-seq].filled .hole { opacity: 0; }
+[data-seq].next .hole { transform-box: fill-box; transform-origin: 50% 50%; animation: twinkle 1s ease-in-out infinite; }
+.seq-chip { min-width: 64px; height: 64px; border-radius: 18px; border: 3px solid var(--ink); background: #fff; font-size: 24px; font-weight: 800;
+  box-shadow: 0 3px 0 var(--ink); display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 14px; }
+.seq-chip svg { width: 38px; height: 38px; }
+.seq-chip.no { animation: wobble .45s; }
 .found .ring { opacity: 1; stroke-dashoffset: 0; transition: stroke-dashoffset .5s ease-out; }
 .found .bump, .tap.found > g { animation: hop .5s ease-out; }
 .tap.no { animation: shake .5s; transform-box: fill-box; transform-origin: 50% 50%; }
