@@ -1,6 +1,8 @@
 // The episode as a picture book: turn the pages, the voice reads each page sentence by sentence, the picture moves
 // with the sentence being read, and a puzzle stops the reading until the child has solved it.
-// Recordings come from tools/make_poem_sounds.py (same voice as 诗词世界): audio/voice.js says which text plays which file.
+// Recordings: audio/voice.js says which text plays which file (VOICE_FILES). A page's sentences may instead be read
+// in one continuous take (VOICE_TAKES: "page|sentence" → [file, start, end] seconds), so the voice flows like a told story;
+// the sentence being read lights up and moves the picture as the take reaches it.
 //
 // Everything it needs is in the page itself (the published pages have no drawing code):
 //   .pg                    a page; .beat[data-b][data-say] its sentences, .beat.after the ones read after the puzzle
@@ -18,6 +20,8 @@ if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged 
 // iPad / iPhone: play like a video, even when the device is on silent
 if (navigator.audioSession) navigator.audioSession.type = 'playback';
 const files = () => (typeof VOICE_FILES !== 'undefined' ? VOICE_FILES : {});
+const takes = () => (typeof VOICE_TAKES !== 'undefined' ? VOICE_TAKES : {});
+const takeOf = (el) => takes()[`${el.closest('.pg').dataset.pg}|${el.dataset.say}`];
 
 // one thing plays at a time; stop() cancels everything that is waiting
 let playId = 0, nowAudio = null, nowEl = null, audioEl = null;
@@ -54,6 +58,28 @@ function say(text) {
     }
   });
 }
+// play seconds from–to of a take; onTime(t) is called on every frame while it plays
+function playTake(file, from, to, onTime) {
+  const id = playId;
+  return new Promise((done) => {
+    if (id !== playId) return done(false);
+    const a = audioEl || (audioEl = new Audio());
+    a.src = `${AUDIO_DIR}${file}#t=${from},${to}`;
+    nowAudio = a;
+    let over = false;
+    const finish = (ok) => { if (!over) { over = true; done(ok && id === playId); } };
+    const tick = () => {
+      if (over) return;
+      if (id !== playId) return finish(false);
+      if (onTime) onTime(a.currentTime);
+      if (a.ended || a.currentTime >= to - 0.03) { a.pause(); return finish(true); }
+      requestAnimationFrame(tick);
+    };
+    a.onended = a.onerror = () => finish(true);
+    a.play().then(() => { document.body.classList.remove('muted'); requestAnimationFrame(tick); })
+      .catch(() => { document.body.classList.add('muted'); setTimeout(() => finish(true), (to - from) * 1000); });
+  });
+}
 const pause = (ms) => { const id = playId; return new Promise((r) => setTimeout(() => r(id === playId), ms)); };
 const hidden = (pg, sel) => pg.querySelector(sel);
 
@@ -77,10 +103,16 @@ function applyBeat(pg, b) {
 
 // ---------------- reading ----------------
 const beats = (pg) => [...pg.querySelectorAll('.beat')];
-async function readBeat(pg, el) {
+function mark(pg, el) {
   beats(pg).forEach((x) => x.classList.toggle('on', x === el));
   applyBeat(pg, +el.dataset.b);
-  const ok = await say(el.dataset.say);
+}
+// the breath after a sentence read on its own: longer after a full stop or "……", short after a comma
+const breath = (t) => (/……[”"]?$/.test(t) ? 800 : /[。！？][”"]?$/.test(t) ? 550 : /[，、]$/.test(t) ? 120 : 400);
+async function readBeat(pg, el) {
+  mark(pg, el);
+  const tk = takeOf(el);
+  const ok = await (tk ? playTake(...tk) : say(el.dataset.say));
   el.classList.remove('on');
   return ok;
 }
@@ -91,13 +123,33 @@ async function narrate(pg, from = 0) {
   if (btn) { nowEl = btn; btn.classList.add('is-playing'); }
   // no waiting before the first sentence: it must start inside the tap that turned the page, or Safari blocks the sound
   if (from === 0) resetScene(pg);
-  for (const el of beats(pg).slice(from)) {
-    if (el.classList.contains('after') && !pg.classList.contains('solved')) {
+  const list = beats(pg), take = takeOf;
+  for (let i = from; i < list.length;) {
+    const el = list[i], after = el.classList.contains('after');
+    if (after && !pg.classList.contains('solved')) {
       if (btn) btn.classList.remove('is-playing');
       nowEl = null;
       return startPuzzle(pg);
     }
-    if (!(await readBeat(pg, el)) || !(await pause(350))) return;
+    const tk = take(el);
+    if (!tk) {
+      if (!(await readBeat(pg, el)) || !(await pause(breath(el.dataset.say)))) return;
+      i++;
+      continue;
+    }
+    // the sentences that follow in the same take play on without a break; each lights up when the voice reaches it
+    let j = i + 1;
+    while (j < list.length && take(list[j]) && take(list[j])[0] === tk[0] && list[j].classList.contains('after') === after) j++;
+    const run = list.slice(i, j);
+    let shown = -1;
+    const ok = await playTake(tk[0], tk[1], take(run[run.length - 1])[2], (t) => {
+      let k = 0;
+      run.forEach((b, n) => { if (t >= take(b)[1] - 0.05) k = n; });
+      if (k !== shown) { shown = k; mark(pg, run[k]); }
+    });
+    if (!ok) return;
+    run.forEach((b) => b.classList.remove('on'));
+    i = j;
   }
   if (id === playId) { stop(); finished(pg); }
 }
@@ -200,7 +252,7 @@ function onStone(pg, t) {
     else stop();
   } else if (!t.classList.contains('found')) {
     t.classList.remove('no'); t.getBoundingClientRect(); t.classList.add('no');
-    speakThen(pz.dataset.wrong, () => at && say(`${at} 后面是几？`));
+    speakThen(pz.dataset.wrong, () => at && say(`${'一二三四五六七八九'[at - 1]}后面是几？`));
   }
 }
 
