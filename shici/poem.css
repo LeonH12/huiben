@@ -1,0 +1,119 @@
+/* 诗词世界: one poem over four short days, on a tablet */
+:root { --ink: #3a1f0f; --red: #c0392b; --paper: #fdf8ef; --card: #ffffff; --line: #eadfcd; --gold: #ffd23f; --soft: #8a7d6d; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: #2b2118; font-family: "PingFang SC", sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 16px 16px 60px; }
+svg { display: block; width: 100%; height: auto; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: center; }
+.kai { font-family: "Kaiti SC", "STKaiti", "KaiTi", serif; }
+
+.note { font-size: 13px; color: #8a8f99; margin: 4px 0 12px; line-height: 1.6; }
+.top { display: flex; align-items: center; gap: 16px; padding: 8px 4px 4px; }
+.top > div { flex: 1; }
+.top svg { width: 240px; flex: none; border-radius: 16px; overflow: hidden; }
+.tag { display: inline-block; background: var(--ink); color: #fff; border-radius: 20px; padding: 2px 14px; font-size: 15px; }
+h1 { margin: 8px 0 2px; font-size: 40px; font-weight: 400; color: var(--red); }
+h1 small { display: block; font-size: 18px; color: var(--soft); margin-top: 4px; }
+
+.sec { background: var(--card); border: 3px solid var(--line); border-radius: 24px; padding: 16px 18px 20px; margin-top: 18px; }
+.sec h2 { margin: 0; font-size: 26px; display: flex; align-items: baseline; gap: 10px; }
+.sec h2 .n { align-self: center; width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 18px; display: inline-flex; align-items: center; justify-content: center; }
+.sec h2 small { font-size: 16px; color: var(--soft); font-weight: 400; }
+
+[data-say], [data-file], .play-line, .play-poem, .play-song { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.is-playing { outline: 4px solid var(--gold); outline-offset: 2px; border-radius: 18px; }
+a.btn { color: inherit; text-decoration: none; }
+.btn { display: inline-block; background: var(--gold); border: 3px solid var(--ink); border-radius: 999px; padding: 6px 20px; font-size: 20px; box-shadow: 0 3px 0 var(--ink); }
+.btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+.btn.is-playing { background: #ffb3a7; outline: none; }
+.btn.is-playing::before { content: "■ "; }
+.bar { text-align: center; margin-top: 12px; }
+
+/* the poem text: characters with pinyin; chunks light up as they are read */
+.verse { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
+.chunk { display: flex; gap: 2px; padding: 2px 8px 6px; border-radius: 14px; transition: background .25s, color .25s; }
+.chunk.on { background: #ffe9a8; color: var(--red); }
+.ch { text-align: center; min-width: 1.1em; }
+.ch i { display: block; font-style: normal; font-size: 14px; color: var(--soft); font-family: "PingFang SC", sans-serif; }
+.ch b { font-weight: 400; font-size: 46px; line-height: 1.15; }
+.verse.small .ch b { font-size: 32px; }
+.verse.small .ch i { font-size: 12px; }
+
+.line-card { border: 3px solid var(--line); border-radius: 20px; overflow: hidden; margin-top: 14px; background: #fff; }
+.line-card .verse { margin: 8px 0 4px; }
+.line-card .bar { margin: 4px 0 12px; }
+.title-say { text-align: center; margin-bottom: 4px; }
+.title-say .verse .ch b { font-size: 30px; }
+
+/* word cards under a line: chunk, what it means, a gesture for the grown-up to show */
+.words { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+.word { background: #fffaf0; border: 3px solid var(--line); border-radius: 18px; padding: 8px 10px 10px; text-align: left; }
+.word .verse { justify-content: flex-start; }
+.word .verse .ch b { font-size: 36px; }
+.word .mean { display: block; margin-top: 6px; font-size: 17px; line-height: 1.5; background: #fff; border-radius: 12px; padding: 6px 8px; }
+.word .act { display: block; margin-top: 6px; font-size: 13px; color: #8a8f99; }
+.whole { display: block; width: 100%; margin-top: 12px; background: #f3f8ec; border-radius: 16px; padding: 10px 14px; font-size: 20px; text-align: left; line-height: 1.5; }
+.whole::before { content: "合起来："; color: var(--soft); font-size: 15px; }
+
+/* story pages */
+.story { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.page { border: 3px solid var(--line); border-radius: 18px; overflow: hidden; background: #fff; text-align: left; }
+.page p { margin: 0; padding: 8px 12px 12px; font-size: 18px; line-height: 1.55; }
+
+/* song with the scenes */
+.song-show .frame { position: relative; border-radius: 18px; overflow: hidden; aspect-ratio: 800 / 470; background: #cdeefe; }
+.song-show .frame svg.scene { position: absolute; inset: 0; opacity: 0; transition: opacity .4s; }
+.song-show .frame svg.scene.shown { opacity: 1; }
+.song-lines { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; margin-top: 10px; font-size: 26px; text-align: center; }
+.song-line { border-radius: 12px; padding: 2px 0; transition: background .25s, color .25s; }
+.song-line.on { background: #ffe9a8; color: var(--red); }
+.credit { margin: 8px 0 0; }
+
+/* 遮字背 */
+.levels { display: flex; justify-content: center; gap: 10px; margin: 6px 0 12px; }
+.hide-level { border: 3px solid var(--ink); border-radius: 999px; padding: 4px 16px; font-size: 18px; background: #fff; }
+.hide-level.on { background: var(--gold); }
+.recite { display: grid; gap: 6px; }
+.recite .ch b { font-size: 48px; }
+.recite[data-level="1"] .h1:not(.open) b, .recite[data-level="2"] .h2:not(.open) b, .recite[data-level="3"] .h3:not(.open) b { color: transparent; background: #f3efe6; border: 3px dashed #c9bda8; border-radius: 10px; }
+.recite[data-level="1"] .h1:not(.open) i, .recite[data-level="2"] .h2:not(.open) i, .recite[data-level="3"] .h3:not(.open) i { visibility: hidden; }
+
+.talk { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: center; }
+.talk p { margin: 0; font-size: 22px; line-height: 1.6; text-align: left; }
+
+/* day links */
+.day-nav { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; font-size: 17px; }
+.day-nav a { color: var(--ink); text-decoration: none; }
+.day-nav .dots { display: flex; gap: 6px; }
+.day-nav .dots a { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--ink); display: inline-flex; align-items: center; justify-content: center; }
+.day-nav .dots a.on { background: var(--ink); color: #fff; }
+.day-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.day-card { display: block; border: 3px solid var(--line); border-radius: 18px; padding: 10px; text-decoration: none; color: inherit; background: #fffaf0; text-align: center; }
+.day-card b { display: block; font-size: 22px; margin-top: 4px; }
+.day-card span { font-size: 14px; color: var(--soft); }
+
+/* ---- scene movement: a piece marked kN moves when the scene gets cN (chunk N is being read) ---- */
+.scene .pop { transform-box: fill-box; transform-origin: 50% 100%; transform: scale(0); transition: transform .45s cubic-bezier(.3, 1.6, .5, 1); }
+.scene .pop.mid { transform-origin: 50% 50%; }
+.scene .fade { opacity: 0; transition: opacity .6s; }
+.scene .dim, .scene .out { transition: opacity .6s; }
+.scene .grow { transform-box: fill-box; transform-origin: 50% 50%; transition: transform .9s cubic-bezier(.3, 1.4, .5, 1); }
+.scene .move { transition: transform 1.8s ease-in-out; }
+.scene.c0 .k0.pop, .scene.c1 .k1.pop, .scene.c2 .k2.pop, .scene.done .kd.pop { transform: scale(1); }
+.scene.c0 .k0.fade, .scene.c1 .k1.fade, .scene.c2 .k2.fade, .scene.done .kd.fade { opacity: 1; }
+.scene.c0 .k0.dim, .scene.c1 .k1.dim, .scene.c2 .k2.dim { opacity: .3; }
+.scene.c0 .k0.out, .scene.c1 .k1.out, .scene.c2 .k2.out { opacity: 0; }
+.scene.c0 .k0.grow, .scene.c1 .k1.grow, .scene.c2 .k2.grow { transform: scale(1.7); }
+.scene.c0 .k0.move, .scene.c1 .k1.move, .scene.c2 .k2.move { transform: var(--to); }
+.scene.quick, .scene.quick * { transition: none !important; }
+.scene .bob { animation: bob 1.2s ease-in-out infinite; }
+@keyframes bob { 50% { translate: 0 -6px; } }
+
+@media (max-width: 620px) {
+  h1 { font-size: 30px; }
+  .top svg { width: 150px; }
+  .ch b { font-size: 34px; }
+  .words, .story, .talk { grid-template-columns: 1fr; }
+  .day-grid { grid-template-columns: 1fr 1fr; }
+  .song-lines { font-size: 20px; }
+}
