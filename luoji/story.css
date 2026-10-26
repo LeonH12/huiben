@@ -154,6 +154,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .seq-chip.no { animation: wobble .45s; }
 .found .ring { opacity: 1; stroke-dashoffset: 0; transition: stroke-dashoffset .5s ease-out; }
 .found .bump, .tap.found > g { animation: hop .5s ease-out; }
+.tap .tell { opacity: 0; transition: opacity .3s; }   /* the count on a thing: shown once it is tapped, right or wrong */
+.tap.no .tell, .tap.found .tell { opacity: 1; }
 .tap.no { animation: shake .5s; transform-box: fill-box; transform-origin: 50% 50%; }
 .hinting .tap[data-find]:not(.found) { transform-box: fill-box; transform-origin: 50% 50%; animation: wiggle .5s ease-in-out 3; }
 [data-slot] { transform-box: fill-box; transform-origin: 50% 50%; transform: scale(0); transition: transform .4s cubic-bezier(.3, 1.6, .5, 1); }

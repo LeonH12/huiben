@@ -85,7 +85,11 @@ async function narrate(pg, from = 0) {
     run.forEach((b) => b.classList.remove('on'));
     i = j;
   }
-  if (id === playId) { stop(); finished(pg); }
+  if (id !== playId) return;
+  stop();
+  // a puzzle with no sentences after it (the page's last beat asks it) starts once everything is read
+  if (P(pg) && !pg.classList.contains('solved')) return startPuzzle(pg);
+  finished(pg);
 }
 function finished(pg) {
   pg.dataset.read = '1';
@@ -292,6 +296,14 @@ function onCell(pg, t) {
 // ---------------- turning pages ----------------
 const pages = [...document.querySelectorAll('.pg')];
 let cur = 0;
+// nothing is kept: a page opened again (or heard again) has its puzzle unsolved, so the child can play it again
+let blank = [];
+function fresh(pg) {
+  if (!pg.classList.contains('asking') && !pg.classList.contains('solved')) return;
+  if (held && held.pg === pg) held = null;
+  pg.classList.remove('asking', 'solved', 'hinting');
+  pg.replaceChildren(...blank[pages.indexOf(pg)].cloneNode(true).childNodes);
+}
 function show(i) {
   if (i < 0 || i >= pages.length || i === cur) return;
   stop();
@@ -301,6 +313,7 @@ function show(i) {
   pages[i].classList.remove('left');
   pages[i].classList.add('on');
   cur = i;
+  fresh(pages[i]);
   document.querySelectorAll('.dot').forEach((d, k) => { d.classList.toggle('on', k === i); if (k === i) d.classList.add('seen'); });
   /** @type {HTMLButtonElement} */ (document.querySelector('.pager .prev')).disabled = i === 0;
   /** @type {HTMLButtonElement} */ (document.querySelector('.pager .next')).disabled = i === pages.length - 1;
@@ -319,7 +332,8 @@ document.addEventListener('click', (e) => {
   if (hit('.pager .prev')) return show(cur - 1);
   if (hit('.dot')) return show(+hit('.dot').dataset.go);
   if (!pg) return;
-  if (hit('.again')) return narrate(pg);   // always from the first sentence (it used to stop when tapped while reading)
+  // always from the first sentence; a solved puzzle starts over (one half done keeps its progress)
+  if (hit('.again')) { if (pg.classList.contains('solved')) fresh(pg); return narrate(pg); }
   if (hit('.chip')) return onChip(pg, hit('.chip'));
   if (hit('.add')) return onFill(pg, true);
   if (hit('.hint')) {
@@ -365,3 +379,4 @@ document.querySelectorAll('.rig, .rig-head, .rig-eyes, .didi-eyes').forEach((/**
   if (!e.classList.contains('rig')) e.style.animationDuration = `${(4 + Math.random() * 3).toFixed(2)}s`;
 });
 /** @type {HTMLButtonElement} */ (document.querySelector('.pager .prev')).disabled = true;
+blank = pages.map((pg) => pg.cloneNode(true));   // after the breathing delays above, so the copies keep them
