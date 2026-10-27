@@ -180,6 +180,9 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .bin.over .bin-bg { fill: #fff3b0; }
 .hinting .drag:not(.placed) .lift { transform-box: fill-box; transform-origin: 50% 50%; animation: wiggle .5s ease-in-out 3; }
 [data-choice].found > .card { stroke: var(--red); stroke-width: 7; }
+/* pouring: a meter's cells light up as things are poured in */
+[data-fuel] .lit { opacity: 0; transition: opacity .35s; }
+[data-fuel].on .lit { opacity: 1; }
 
 @keyframes breathe { 50% { transform: scale(1.012, .99); } }
 @keyframes blink { 0%, 94%, 100% { transform: none; } 96% { transform: scaleY(.1); } }

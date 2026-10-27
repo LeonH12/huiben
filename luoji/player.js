@@ -27,12 +27,16 @@ function resetScene(pg) {
   sc.classList.remove('quick');
 }
 // beat b: its pieces move; pieces of earlier beats that have not moved yet are put in place at once
+// (a series may act on a beat too, fn(pg, b): 故事大王/play.js plays the sound effects of the pieces that move)
+/** @type {((pg: Element, b: number) => void)[]} */
+const onBeat = [];
 function applyBeat(pg, b) {
   pg.querySelectorAll('svg.scene [data-at]').forEach((e) => {
     const k = +e.dataset.at;
     if (k === b) { e.classList.remove('q', 'go'); e.getBoundingClientRect(); e.classList.add('go'); }
     else if (k < b && !e.classList.contains('go')) e.classList.add('go', 'q');
   });
+  onBeat.forEach((fn) => fn(pg, b));
 }
 
 // ---------------- reading ----------------
@@ -98,6 +102,9 @@ function finished(pg) {
 
 // ---------------- puzzles ----------------
 const P = (pg) => pg.querySelector('.puzzle');
+// puzzle types a series adds for itself (故事大王/play.js: build, tapwind, told): type → start(page, puzzle), called once
+/** @type {Record<string, (pg: Element, pz: Element) => void>} */
+const PUZZLE_PLAY = {};
 async function speakThen(text, fn) { stop(); if (await say(text)) fn && fn(); }
 
 function startPuzzle(pg) {
@@ -107,6 +114,7 @@ function startPuzzle(pg) {
   const type = pz.dataset.type;
   if (pz.dataset.started) return;
   pz.dataset.started = '1';
+  if (PUZZLE_PLAY[type]) return PUZZLE_PLAY[type](pg, pz);
   if (type === 'find' && pz.dataset.demo) {   // show how: the first one gets its ring
     const first = pg.querySelector('[data-find]');
     stop();
@@ -157,7 +165,10 @@ function onFind(pg, t) {
   if ('decoy' in t.dataset) { t.classList.remove('no'); t.getBoundingClientRect(); t.classList.add('no'); return speakThen(t.dataset.no || pz.dataset.decoySay); }
   if (t.classList.contains('found')) return;
   t.classList.add('found');
-  if (!pg.querySelector('[data-find]:not(.found)')) speakThen(pz.dataset.done, () => openAsk(pg));
+  const all = !pg.querySelector('[data-find]:not(.found)');
+  // a thing with a line of its own says it first (故事大王: each pig says what he does)
+  if (t.dataset.say) { stop(); say(t.dataset.say).then((ok) => ok && all && speakThen(pz.dataset.done, () => openAsk(pg))); return; }
+  if (all) speakThen(pz.dataset.done, () => openAsk(pg));
 }
 
 // pattern puzzle: the next empty place pulses; a chip fills it if it is what the pattern needs
@@ -175,7 +186,7 @@ function onSeq(pg, chip) {
     else { stop(); say(chip.dataset.say, chip.dataset.file); }
   } else {
     chip.classList.remove('no'); chip.getBoundingClientRect(); chip.classList.add('no');
-    speakThen(pz.dataset.wrong);
+    speakThen(chip.dataset.no || pz.dataset.wrong);
   }
 }
 
@@ -230,6 +241,7 @@ function binAt(pg, p) {
   return [...pg.querySelectorAll('.bin')].find((b) => { const [x, y, w, h] = b.dataset.box.split(',').map(Number); return p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + h; });
 }
 function onSortDrop(pg, d, b) {
+  if (P(pg).dataset.type === 'pour') return onPour(pg, d, b);
   const pz = P(pg), want = d.dataset.drag;
   if (!b) { d.style.transform = ''; return; }
   const got = b.dataset.bin;
@@ -247,6 +259,25 @@ function onSortDrop(pg, d, b) {
   if (!pg.querySelector('.drag:not(.placed)')) speakThen(pz.dataset.done, () => solved(pg));
   else { stop(); say('对啦！'); }
 }
+// pouring (puzzle 'pour', dragged like sorting): a thing dropped on the .bin settles in its next slot and lights the next
+// data-each [data-fuel] cells; every cell lit = solved. Dropped anywhere else it goes back home.
+function onPour(pg, d, b) {
+  const pz = P(pg);
+  if (!b) { d.style.transform = ''; return; }
+  const n = pg.querySelectorAll('.drag.placed').length, [sx, sy] = b.dataset.slots.split(' ')[n].split(',').map(Number);
+  d.style.transform = `translate(${sx - +d.dataset.x}px, ${sy - +d.dataset.y}px)`;
+  d.classList.add('placed');
+  [...pg.querySelectorAll('[data-fuel]:not(.on)')].slice(0, +pz.dataset.each).forEach((c) => c.classList.add('on'));
+  if (!pg.querySelector('[data-fuel]:not(.on)')) speakThen(pz.dataset.done, () => solved(pg));
+  else { stop(); say(pz.dataset.lines.split('|')[n] || '对啦！'); }
+}
+// a tapped thing with data-pick (a route card …) names itself on its scene (svg.scene[data-pick]), so the picture can
+// act it out with CSS; set again on every tap, so the acting starts over
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('.tap[data-pick]'), sc = t && t.closest('svg.scene'), pg = sc && sc.closest('.pg');
+  if (!t || !pg.classList.contains('asking')) return;
+  delete sc.dataset.pick; sc.getBoundingClientRect(); sc.dataset.pick = t.dataset.pick;
+});
 document.addEventListener('pointerdown', (e) => {
   const d = e.target.closest('.drag'), pg = d && d.closest('.pg');
   if (!d || d.classList.contains('placed') || !pg.classList.contains('asking') || pg.classList.contains('solved')) return;
@@ -356,7 +387,13 @@ document.addEventListener('click', (e) => {
   }
   if (hit('.ask .q')) return speakThen(hit('.ask').dataset.say);
   const beat = hit('.beat');
-  if (beat) { stop(); nowEl = beat; readBeat(pg, beat).then((ok) => ok && stop()); }
+  // a sentence tapped before the page's puzzle has opened: read it, then go on reading from there (else the puzzle,
+  // which opens when the reading reaches it, would never open)
+  if (beat) {
+    stop(); nowEl = beat;
+    const before = P(pg) && !P(pg).dataset.started;
+    readBeat(pg, beat).then((ok) => { if (!ok) return; stop(); if (before) narrate(pg, beats(pg).indexOf(beat) + 1); });
+  }
 });
 
 document.addEventListener('keydown', (e) => {
@@ -364,8 +401,9 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft') show(cur - 1);
 });
 let touchX = null, touchY = null;
-// a swipe turns the page, but not a finger dragging something in a sorting puzzle
-document.addEventListener('touchstart', (e) => { touchX = /** @type {Element} */ (e.target).closest('.drag') ? null : e.touches[0].clientX; touchY = e.touches[0].clientY; }, { passive: true });
+// a swipe turns the page, but not a finger dragging something in a sorting puzzle, or on a .grab (a piece of 故事大王's
+// interactions, or a whole page while the child taps it as fast as they can)
+document.addEventListener('touchstart', (e) => { touchX = /** @type {Element} */ (e.target).closest('.drag, .grab') ? null : e.touches[0].clientX; touchY = e.touches[0].clientY; }, { passive: true });
 document.addEventListener('touchend', (e) => {
   if (touchX == null) return;
   const dx = e.changedTouches[0].clientX - touchX, dy = e.changedTouches[0].clientY - touchY;
