@@ -333,7 +333,9 @@ function fresh(pg) {
   if (!pg.classList.contains('asking') && !pg.classList.contains('solved')) return;
   if (held && held.pg === pg) held = null;
   pg.classList.remove('asking', 'solved', 'hinting');
-  pg.replaceChildren(...blank[pages.indexOf(pg)].cloneNode(true).childNodes);
+  const copy = blank[pages.indexOf(pg)].cloneNode(true).childNodes;
+  if (pg.replaceChildren) pg.replaceChildren(...copy);
+  else { pg.innerHTML = ''; [...copy].forEach((n) => pg.appendChild(n)); }   // an older browser
 }
 function show(i) {
   if (i < 0 || i >= pages.length || i === cur) return;
@@ -403,6 +405,10 @@ document.addEventListener('keydown', (e) => {
 // a finger that starts on something to drag (a sorting piece, a piece of 故事大王's interactions) is the page's: without
 // this a phone takes it for a scroll and cancels the drag at once (touch-action is ignored on the parts of an svg)
 document.addEventListener('touchstart', (e) => { if (/** @type {Element} */ (e.target).closest('.drag, .grab')) e.preventDefault(); }, { passive: false });
+// the screen's height for story.css (--app-h): measured, as older browsers (a learning tablet's AOSP browser) know no dvh
+const appHeight = () => document.documentElement.style.setProperty('--app-h', `${window.innerHeight}px`);
+appHeight();
+['resize', 'orientationchange'].forEach((t) => window.addEventListener(t, () => { appHeight(); setTimeout(appHeight, 300); }));
 let touchX = null, touchY = null;
 // a swipe turns the page, but not a finger dragging something in a sorting puzzle, or on a .grab (a piece of 故事大王's
 // interactions, or a whole page while the child taps it as fast as they can)

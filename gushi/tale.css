@@ -8,12 +8,14 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .note { font-size: 13px; color: #8a8f99; margin: 4px 0 10px; line-height: 1.6; }
 
 /* ---- pages: one at a time, sliding in ---- */
-.reader { position: relative; height: 100dvh; }
-.pg { position: absolute; inset: 0 0 64px; display: grid; grid-template-columns: auto 1fr; gap: 18px; padding: 14px 18px 0;
+/* the height of the screen: --app-h is measured by player.js (older browsers, e.g. a learning tablet's AOSP browser, know
+   neither dvh nor aspect-ratio: there the picture ran off the bottom and the arrows vanished); 100vh until it is set */
+.reader { position: relative; height: 100vh; height: var(--app-h, 100vh); }
+.pg { position: absolute; top: 0; left: 0; right: 0; bottom: 64px; display: grid; grid-template-columns: auto 1fr; gap: 18px; padding: 14px 18px 0;
   opacity: 0; visibility: hidden; transform: translateX(40px); transition: opacity .45s, transform .45s, visibility 0s .45s; }
 .pg.on { opacity: 1; visibility: visible; transform: none; transition: opacity .45s, transform .45s; }
 .pg.left { transform: translateX(-40px); }
-.art { height: calc(100dvh - 78px); aspect-ratio: 700 / 760; max-width: 62vw; }
+.art { height: calc(var(--app-h, 100vh) - 78px); width: calc((var(--app-h, 100vh) - 78px) * 700 / 760); max-width: 62vw; }
 .art svg { width: 100%; height: 100%; }
 .text { overflow-y: auto; padding: 6px 4px 20px; min-width: 0; }
 .text h1 { font-size: 40px; margin: 10px 0 6px; color: var(--red); }
@@ -70,8 +72,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 @media (orientation: portrait), (max-width: 760px) {
   .pg { grid-template-columns: 1fr; grid-template-rows: auto 1fr; gap: 8px; padding: 10px 14px 0; }
-  .art { height: auto; width: 100%; max-width: none; max-height: 58dvh; display: flex; justify-content: center; }
-  .art svg { width: auto; max-width: 100%; height: 100%; max-height: 58dvh; aspect-ratio: 700 / 760; }
+  .art { height: auto; width: 100%; max-width: none; max-height: calc(var(--app-h, 100vh) * .58); display: flex; justify-content: center; }
+  .art svg { width: calc(var(--app-h, 100vh) * .58 * 700 / 760); max-width: 100%; height: auto; max-height: calc(var(--app-h, 100vh) * .58); }
   .beats { font-size: 19px; }
   .text h1 { font-size: 30px; }
 }
@@ -224,7 +226,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .scene .grab, .scene .grab * { pointer-events: auto; touch-action: none; cursor: grab; }
 /* phones ignore touch-action on the parts of an svg: set it on the picture itself on the pages where the child drags or
    taps fast, or the browser takes the finger for a scroll and cancels the drag (parent, 2026-10-27: 手机拖不了) */
-.pg:has(.puzzle[data-type="build"]) svg.scene, .pg:has(.puzzle[data-type="tapwind"]) svg.scene { touch-action: none; }
+.pg.hands svg.scene { touch-action: none; }   /* .hands: set by play.js (old browsers have no :has) */
 .scene .grab .ghost, .scene .grab .ghost * { pointer-events: none; }
 /* what belongs to another job never catches the finger (a later strip lying over this one), unless it is .keep (a pile
    waiting for its turn: touched early, it wobbles and says why) */

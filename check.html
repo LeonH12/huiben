@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>浏览器检查</title>
+<!-- published as site/check.html by tools/build_site.py: open it on a device whose browser has trouble with the pages and
+     send a screenshot; it lists what that browser can do and which events a tap sends -->
+<style>
+  body { font: 16px/1.5 sans-serif; margin: 12px; color: #3a1f0f; background: #fdf8ef; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  table { border-collapse: collapse; width: 100%; }
+  td { border-bottom: 1px solid #eadfcd; padding: 3px 6px; vertical-align: top; word-break: break-all; }
+  .ok { color: #2e8b3e; font-weight: bold; } .no { color: #d0342c; font-weight: bold; }
+  #pad { margin-top: 12px; height: 140px; border: 3px dashed #e8774d; border-radius: 14px; display: flex; align-items: center;
+    justify-content: center; font-size: 20px; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #log { font-size: 14px; }
+</style>
+</head>
+<body>
+<h1>浏览器检查（截图发给我）</h1>
+<table id="t"></table>
+<div id="pad">在这里点几下、拖一拖</div>
+<p id="log"></p>
+<script>
+var rows = [];
+function row(name, ok, extra) { rows.push('<tr><td>' + name + '</td><td class="' + (ok ? 'ok' : 'no') + '">' + (ok ? '有' : '没有') + '</td><td>' + (extra || '') + '</td></tr>'); }
+function css(p, v) { try { return CSS.supports(p, v); } catch (e) { return false; } }
+var ua = navigator.userAgent, m = ua.match(/Chrome\/(\d+)/);
+rows.push('<tr><td>浏览器</td><td colspan="2">' + ua + '</td></tr>');
+row('Chrome 内核版本', !!m, m ? m[1] : '');
+row('屏幕（CSS 像素）', true, innerWidth + ' × ' + innerHeight + '，缩放 ' + (window.devicePixelRatio || 1));
+row('PointerEvent', 'PointerEvent' in window);
+row('TouchEvent', 'ontouchstart' in window);
+row('CSS dvh', css('height', '100dvh'));
+row('CSS var()', css('--a', '1'));
+row('CSS aspect-ratio', css('aspect-ratio', '1 / 1'));
+row('CSS :has()', css('selector(:has(a))', ''));
+row('CSS calc() in transform', css('transform', 'scale(calc(1 + 0.5))'));
+row('CSS inset', css('inset', '0'));
+row('flex gap', css('gap', '1px'));
+row('AudioContext', !!(window.AudioContext || window.webkitAudioContext));
+row('fetch', 'fetch' in window);
+row('requestAnimationFrame', 'requestAnimationFrame' in window);
+row('replaceChildren', !!Element.prototype.replaceChildren);
+row('Promise', 'Promise' in window);
+row('async 函数', (function () { try { new Function('return async () => 1'); return true; } catch (e) { return false; } })());
+row('Service Worker（离线）', 'serviceWorker' in navigator);
+document.getElementById('t').innerHTML = rows.join('');
+var seen = {}, pad = document.getElementById('pad'), log = document.getElementById('log');
+['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'touchstart', 'touchmove', 'touchend', 'touchcancel', 'mousedown', 'mouseup', 'click'].forEach(function (t) {
+  pad.addEventListener(t, function () { seen[t] = (seen[t] || 0) + 1; log.textContent = '收到的事件：' + Object.keys(seen).map(function (k) { return k + '×' + seen[k]; }).join('，'); }, { passive: true });
+});
+</script>
+</body>
+</html>
