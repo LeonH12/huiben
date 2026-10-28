@@ -400,6 +400,9 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowRight') show(cur + 1);
   if (e.key === 'ArrowLeft') show(cur - 1);
 });
+// a finger that starts on something to drag (a sorting piece, a piece of 故事大王's interactions) is the page's: without
+// this a phone takes it for a scroll and cancels the drag at once (touch-action is ignored on the parts of an svg)
+document.addEventListener('touchstart', (e) => { if (/** @type {Element} */ (e.target).closest('.drag, .grab')) e.preventDefault(); }, { passive: false });
 let touchX = null, touchY = null;
 // a swipe turns the page, but not a finger dragging something in a sorting puzzle, or on a .grab (a piece of 故事大王's
 // interactions, or a whole page while the child taps it as fast as they can)

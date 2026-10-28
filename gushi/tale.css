@@ -222,6 +222,9 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* ---- build ---- */
 .scene .grab, .scene .grab * { pointer-events: auto; touch-action: none; cursor: grab; }
+/* phones ignore touch-action on the parts of an svg: set it on the picture itself on the pages where the child drags or
+   taps fast, or the browser takes the finger for a scroll and cancels the drag (parent, 2026-10-27: 手机拖不了) */
+.pg:has(.puzzle[data-type="build"]) svg.scene, .pg:has(.puzzle[data-type="tapwind"]) svg.scene { touch-action: none; }
 .scene .grab .ghost, .scene .grab .ghost * { pointer-events: none; }
 /* what belongs to another job never catches the finger (a later strip lying over this one), unless it is .keep (a pile
    waiting for its turn: touched early, it wobbles and says why) */
