@@ -233,6 +233,53 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 [data-bundle].tied .rope { opacity: 1; }
 .hinting .tap[data-stick]:not(.picked) .stk { transform-box: fill-box; transform-origin: 50% 50%; animation: wiggle .5s ease-in-out 3; }
 
+/* puzzle 'give' (puzzles/give.js). A treasure (.pz-give): pressed (.up) the swallow shows carrying it (facing the way the
+   finger goes: .west = left) and it follows the finger; let go, it flies home (.back) or into a place (.given), where the
+   swallow fades away and the treasure stays. */
+.pz-give { transition: transform .45s cubic-bezier(.3, 1.25, .5, 1); }
+.pz-give.up { transition: none; }
+.pz-give.back { transition: transform .45s ease-in-out; }
+.pz-give.given { transition: transform .5s ease-out; }
+.pz-give .pz-carry { display: none; }
+.pz-give.up .pz-carry-r, .pz-give.back .pz-carry-r { display: inline; }
+.pz-give.up.west .pz-carry-r, .pz-give.back.west .pz-carry-r { display: none; }
+.pz-give.up.west .pz-carry-l, .pz-give.back.west .pz-carry-l { display: inline; }
+.pz-give.up .pz-inner { filter: drop-shadow(0 6px 4px rgba(0, 0, 0, .3)); }
+/* she holds her own gem (o.gem): the one drawn at home hides while she carries it */
+.pz-give.pz-gem.up .pz-inner, .pz-give.pz-gem.back .pz-inner { opacity: 0; }
+.pz-give.given .pz-carry { animation: pz-gone .9s ease-in .3s both; }
+.pz-give.given .pz-inner, .pz-give.pz-gem.given .pz-inner { opacity: 1; filter: none; transition: opacity .3s .3s; }
+@keyframes pz-gone { to { opacity: 0; } }
+
+/* the things in the picture that show the treasure is taken: a [data-taken~=id] goes the moment it is picked up (the ruby
+   on the hilt, a gold leaf: the notch or grey patch under it shows); a [data-taken~=id].taken-show appears instead */
+[data-taken] { transition: opacity .15s; }
+[data-taken].taken:not(.taken-show), [data-taken].taken-show:not(.taken) { opacity: 0; }
+
+/* a place (.pz-to): its dashed box shows while a treasure is carried (and on 不会做？), brighter under the finger; it
+   lights up once it has its treasure (.lit: .lit-show appears, .lit-hide goes) */
+.pz-to .pz-box { opacity: 0; transition: opacity .25s; }
+.pz-dragging .pz-to.pz-now:not(.lit) .pz-box, .hinting .pz-to.pz-now:not(.lit) .pz-box { opacity: 1; animation: pz-box .9s ease-in-out infinite alternate; }
+.pz-to.over:not(.lit) .pz-box rect:first-child { fill-opacity: .75; }
+.pz-to.over:not(.lit) .pz-box rect:last-child { stroke: #ffd23f; }
+@keyframes pz-box { from { opacity: .6; } to { opacity: 1; } }
+.pz-to .lit-show, .pz-to .lit-hide { transition: opacity .6s; }
+.pz-to:not(.lit) .lit-show, .pz-to.lit .lit-hide { opacity: 0; }
+
+/* puzzle 'hold' (puzzles/hold.js): the ring round the thing fills while it is held (hold.play.js sets its dashoffset);
+   only the step being done shows its ring, and it breathes until a finger is on it. svg.scene has .pz-holding while a
+   finger holds, .pz-mid from half full on, .pz-held once full: anywhere in the picture (inside the holdSpot or not, e.g.
+   common.js's tags.eyeL = 'class="held-hide"'), .mid-show appears at half, .held-show appears and .held-hide goes when full */
+.pz-hold .pz-track, .pz-hold .pz-ring { transition: opacity .4s; }
+.pz-hold:not(.pz-now) .pz-track, .pz-hold:not(.pz-now) .pz-ring,
+.pz-hold.held .pz-track, .pz-hold.held .pz-ring { opacity: 0; transition: opacity .6s .6s; }
+.pg:not(.solved) .pz-hold.pz-now:not(.held):not(.holding) .pz-track:not(.pz-edge) { animation: pz-breathe 1.8s ease-in-out infinite; }
+@keyframes pz-breathe { 0%, 100% { stroke-opacity: .55; } 50% { stroke-opacity: 1; stroke: #fff6b0; } }
+.pz-hold.holding .pz-ring { filter: drop-shadow(0 0 5px #fff3a0); }
+.pz-hold.held .pz-inner { transform-box: fill-box; transform-origin: 50% 50%; animation: pz-pop .45s ease-out; }
+.scene .mid-show, .scene .held-show, .scene .held-hide { transition: opacity .5s; }
+.scene:not(.pz-mid) .mid-show, .scene:not(.pz-held) .held-show, .scene.pz-held .held-hide { opacity: 0; }
+
 /* puzzle 'pier': a placed board can be tapped off; a full pier turns green, a dead end red; a wrong board is thrown back */
 .scene .planks .drag.placed, .scene .planks .drag.placed * { pointer-events: auto; cursor: pointer; }
 .bin.done .bin-bg { fill: #d8f3cf; }
@@ -242,6 +289,155 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 /* puzzle 'pour': a meter's cells light up as things are poured in */
 [data-fuel] .lit { opacity: 0; transition: opacity .35s; }
 [data-fuel].on .lit { opacity: 1; }
+
+/* puzzles 'tap', 'give', 'hold', 'steps' (puzzles/steps.js): what the four share. Joined into story.css for 逻辑世界 too,
+   so every rule names a pz- class of its own. */
+
+/* what can be touched: only the things of the step being done (.pz-now). 故事大王's tale.css turns on every part of a
+   .grab; the parts that must not catch a finger are turned off again here (a later step's things, a bubble, a glow) */
+.scene .pz-x.pz-now .pz-hit, .scene .pz-x.pz-now .pz-inner, .scene .pz-x.pz-now .pz-inner * { pointer-events: auto; cursor: pointer; touch-action: none; }
+.scene .pz-x:not(.pz-now), .scene .pz-x:not(.pz-now) *,
+.scene .pz-x .pz-halo, .scene .pz-x .pz-flash, .scene .pz-x .pz-bubble, .scene .pz-x .pz-bubble *,
+.scene .pz-to, .scene .pz-to *, .scene .pz-arc, .scene .pz-arc * { pointer-events: none; }
+/* these pages: no scrolling, zooming or selecting on the picture (.pz-hands: set by steps.play.js) */
+.pg.pz-hands svg.scene { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+/* the glow round a thing still to do: a soft ring breathing in and out (tap and give; a hold has its own ring) */
+.pz-halo { opacity: 0; transform-box: fill-box; transform-origin: 50% 50%; }
+.pg:not(.solved) .pz-x.pz-now:not(.full):not(.given):not(.up) .pz-halo { animation: pz-halo 2.4s ease-in-out infinite; }
+@keyframes pz-halo { 0%, 100% { opacity: 0; transform: scale(.85); } 45% { opacity: .95; transform: scale(1.05); } }
+
+/* a little picture popping up (tap, give's places): grows out of its bottom, stays 3 s, shrinks away (.pz-bub, set
+   again each time) */
+.pz-bubble { opacity: 0; transform-box: fill-box; transform-origin: 50% 100%; }
+.pz-bub .pz-bubble { animation: pz-bub 3.6s ease-out both; }
+@keyframes pz-bub {
+  0% { opacity: 0; transform: scale(.1); } 8% { opacity: 1; transform: scale(1.12); } 13% { transform: scale(1); }
+  88% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.1); }
+}
+
+/* the parts of the picture that change with the step: stageIn(k, …) fades in, stageOut(k, …) fades out */
+.pz-in { opacity: 0; visibility: hidden; transition: opacity .7s, visibility 0s .7s; }
+.pz-in.pz-on { opacity: 1; visibility: visible; transition: opacity .7s; }
+.pz-out { transition: opacity .7s; }
+.pz-out.pz-on { opacity: 0; visibility: hidden; transition: opacity .7s, visibility 0s .7s; }
+
+/* the step written out under the sentences (tap it to hear it) */
+.puzzle .pz-how { margin: 8px 2px 2px; font-size: 19px; font-weight: 800; line-height: 1.5; color: #7a4b12; cursor: pointer; }
+.puzzle .pz-how::before { content: '🔊 '; font-size: 15px; }
+/* 不会做？: the things of the step wiggle */
+.hinting .pz-x.pz-now:not(.full):not(.given):not(.held) .pz-inner { transform-box: fill-box; transform-origin: 50% 50%; animation: wiggle .5s ease-in-out 3; }
+
+/* give's dashed arc from a treasure to a place (after 5 s alone, or 不会做？): fades in, its dashes flow to the place */
+.pz-arc { animation: pz-fade .6s ease-out both; }
+.pz-arc path { animation: pz-flow 1.1s linear infinite; }
+@keyframes pz-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pz-flow { to { stroke-dashoffset: -22; } }
+
+/* puzzle 'tap' (puzzles/tap.js): a tapped thing flashes and hops (.flash, set again on every tap); once tapped (.hit)
+   its .hit-show parts appear and .hit-hide parts go. A thing tapped many times counts in data-hits (on it and on
+   svg.scene), for the scene's own CSS: [data-hits="2"] … */
+.pz-tap .pz-flash { opacity: 0; transform-box: fill-box; transform-origin: 50% 50%; }
+.pz-tap.flash .pz-flash { animation: pz-flash .6s ease-out; }
+.pz-tap.flash .pz-inner { transform-box: fill-box; transform-origin: 50% 80%; animation: pz-pop .45s ease-out; }
+@keyframes pz-flash { 0% { opacity: .9; transform: scale(.5); } 100% { opacity: 0; transform: scale(1.5); } }
+@keyframes pz-pop { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.12); } }
+.pz-tap .hit-show, .pz-tap .hit-hide { transition: opacity .4s; }
+.pz-tap:not(.hit) .hit-show, .pz-tap.hit .hit-hide { opacity: 0; }
+
+/* puzzle 'trek' (trek.js draws it, trek.play.js plays it). Parts the child touches are .trek.grab; the move being done has
+   .now, a move done .was. Effects on parts that trek.play.js also moves with an inline transform use the separate
+   rotate / translate / scale properties, which add to that transform instead of replacing it. */
+.scene .trek.grab, .scene .trek.grab * { pointer-events: auto; cursor: pointer; touch-action: none; }
+/* phones ignore touch-action on the parts of an svg: the whole picture of a trek page takes the finger (trek.play.js
+   sets .trek-hands), so fast tapping neither zooms nor scrolls, and a drag is not cancelled */
+.pg.trek-hands svg.scene { touch-action: none; -webkit-user-select: none; user-select: none; }
+.trek-how { margin: 10px 0 0; font-size: 20px; line-height: 1.55; color: var(--ink); cursor: pointer; }
+.trek-how::before { content: '▶ '; color: #e8774d; }
+.trek.nope { transform-box: fill-box; transform-origin: 50% 50%; animation: trek-nope .4s; }
+
+/* the walker: a step moves the whole group (inline transform, `pace` s), with .stepping and --pace on it meanwhile (the
+   drawing steps its legs: 龟兔赛跑/common.js's turtleSideAt). .quiet (the quiet stretch): .when-quiet shows instead of .not-quiet;
+   .talking while the lines after a step are said */
+.trek-walker .when-quiet, .trek-walker.quiet .not-quiet { display: none; }
+.trek-walker.quiet .when-quiet { display: inline; }
+.trek-walker.halt { animation: trek-halt .35s ease-in-out; }
+.trek-trail { opacity: 0; transition: opacity .4s; }
+.trek-trail.on { opacity: .9; }
+
+/* the footprint button: glowing while it can be tapped, grey while it cannot */
+.trek-btn .halo { opacity: 0; transition: opacity .3s; }
+.trek-btn.now:not(.off) .halo { opacity: .75; animation: trek-glow 1.2s ease-in-out infinite; }
+.trek-btn:not(.now), .trek-btn.off { filter: grayscale(1); opacity: .5; transition: opacity .3s, filter .3s; }
+.trek-btn.press { transform-box: fill-box; transform-origin: 50% 50%; animation: trek-press .2s ease-out; }
+
+/* the leaf of the quiet stretch: there once the quiet steps begin, green and glowing when the next step may be taken */
+.trek-leaf { opacity: 0; transition: opacity .4s; }
+.trek-leaf.shown:not(.was) { opacity: 1; }
+.trek-leaf:not(.shown), .trek-leaf:not(.shown) *, .trek-leaf.was, .trek-leaf.was * { pointer-events: none !important; }
+.trek-leaf .halo { opacity: 0; transition: opacity .3s; }
+.trek-leaf .blade { transition: fill .3s; }
+.trek-leaf.ready .blade { fill: #7cc95a; }
+.trek-leaf.ready .halo { opacity: .9; animation: trek-glow 1.2s ease-in-out infinite; }
+.trek-leaf.ready .trek-leafy { transform-box: fill-box; transform-origin: 50% 50%; animation: trek-breathe 1.2s ease-in-out infinite; }
+
+/* the runner dashes off (duration inline), dust flies up where he was; his arrow flashes while it is his turn */
+.trek-runner .trek-body { transition-property: transform; transition-timing-function: cubic-bezier(.55, 0, .7, 1); }
+.trek-dust circle { opacity: 0; transform-box: fill-box; transform-origin: 50% 50%; }
+.trek-runner.ran .trek-dust circle { animation: trek-dust 1s ease-out backwards; }
+.trek-arrow { opacity: 0; transition: opacity .2s; }
+.trek-runner.now:not(.ran) .trek-arrow { opacity: 1; animation: trek-arrow .8s ease-in-out infinite; }
+
+/* a thing tapped once */
+.trek-tapone .halo { opacity: 0; transition: opacity .3s; }
+.trek-tapone.now:not(.did) .halo { opacity: .75; animation: trek-glow 1.2s ease-in-out infinite; }
+.trek-tapone.did .trek-hit { transform-box: fill-box; transform-origin: 50% 50%; animation: trek-press-big .45s ease-out; }
+
+/* drag: the rider follows the finger, slides back when dropped beside the seat, hides when seated (the seat shows it) */
+.trek-rider { transition: transform .8s ease-in-out, opacity .2s; }
+.trek-rider.held { transition: none; }
+.trek-rider.held .lift { transform-box: fill-box; transform-origin: 50% 50%; scale: 1.08; filter: drop-shadow(0 6px 4px rgba(0,0,0,.25)); }
+.trek-rider.gone, .trek-rider.gone * { opacity: 0; pointer-events: none !important; }
+.trek-seat .ghost { opacity: 0; transition: opacity .3s; }
+.trek-seat.now:not(.filled) .ghost { opacity: 1; animation: trek-glow 1.1s ease-in-out infinite; }
+.trek-seat .seated { opacity: 0; }
+.trek-seat.filled .seated { opacity: 1; transform-box: fill-box; transform-origin: 50% 100%; animation: trek-sit .45s cubic-bezier(.3, 1.6, .5, 1); }
+
+/* flags: glowing until tapped, then they wave; their footprints are dim until lit */
+.trek-flag .halo { opacity: 0; transition: opacity .3s; }
+.trek-flag.now:not(.did) .halo { opacity: .75; animation: trek-glow 1.2s ease-in-out infinite; }
+.trek-flag.did .trek-wave { transform-box: fill-box; transform-origin: 30% 100%; animation: trek-wave .9s ease-in-out 2; }
+.trek-count { opacity: .45; transition: opacity .2s; }
+.trek-count .glow { opacity: 0; transition: opacity .2s; }
+.trek-count.on { opacity: 1; transform-box: fill-box; transform-origin: 50% 50%; animation: trek-pop .35s ease-out; }
+.trek-count.on .glow { opacity: .85; }
+/* with the story's own footprint (common.js footprint, o.lit): the lit one shows instead of the dim one */
+.trek-count .lit { opacity: 0; transition: opacity .2s; }
+.trek-count.on .lit { opacity: 1; }
+.trek-count.on:has(.lit) .dim { opacity: 0; }
+
+/* "if" cards float gently, glowing, until opened: then they grow to half the picture (--zoom, set by trek.js) */
+.trek-card { transform-box: view-box; transition: transform .55s cubic-bezier(.3, 1.15, .5, 1); }
+.trek-card.open { transform: var(--zoom); filter: drop-shadow(0 10px 18px rgba(0,0,0,.3)); }
+.trek-card .halo { opacity: 0; transition: opacity .3s; }
+.trek-card.now:not(.open):not(.seen) .halo { opacity: .8; animation: trek-glow 1.3s ease-in-out infinite; }
+.trek-card.now:not(.open) { animation: trek-float 3.2s ease-in-out infinite; }
+.trek-card.nope { transform-box: view-box; }
+.trek-card.shutting, .trek-card.shutting * { pointer-events: none !important; }
+/* (a step too fast in the quiet stretch adds .twitch to every .hare-ear-twitch: the drawing, 龟兔赛跑/common.js, twitches it) */
+
+@keyframes trek-glow { 0%, 100% { opacity: .85; } 50% { opacity: .35; } }
+@keyframes trek-nope { 25% { rotate: -8deg; } 75% { rotate: 8deg; } }
+@keyframes trek-halt { 30% { translate: -4px 0; } 65% { translate: 3px 0; } }
+@keyframes trek-press { 50% { scale: .88; } }
+@keyframes trek-press-big { 35% { scale: 1.25; } 70% { scale: .95; } }
+@keyframes trek-breathe { 50% { scale: 1.12; } }
+@keyframes trek-dust { 0% { opacity: 0; scale: .3; } 25% { opacity: 1; } 100% { opacity: 0; scale: 1.6; translate: -30px -18px; } }
+@keyframes trek-arrow { 50% { translate: 14px 0; } }
+@keyframes trek-sit { 0% { scale: .6 .4; } 70% { scale: 1.06 1.08; } 100% { scale: 1; } }
+@keyframes trek-wave { 25% { rotate: -9deg; } 75% { rotate: 7deg; } }
+@keyframes trek-pop { 40% { scale: 1.45; } }
+@keyframes trek-float { 50% { translate: 0 -8px; } }
 
 /* 故事大王: what the fairy tales add to the picture book's look (../shared/reader/story.css, loaded first):
    the interactions of tale.js / play.js — build, tapwind, told */

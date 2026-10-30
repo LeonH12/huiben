@@ -146,6 +146,32 @@ function startPuzzle(pg) {
   }
 }
 
+// the child starts a puzzle before the voice has asked for it: the reading stops, and the picture is put where the
+// skipped lead-in would have left it (every [data-at] before the first sentence read after the puzzle)
+function skipLeadIn(pg) {
+  stop();
+  const list = beats(pg), first = list.findIndex((b) => b.classList.contains('after')), upto = first < 0 ? list.length : first;
+  pg.querySelectorAll('svg.scene [data-at]').forEach((x) => { if (+x.dataset.at < upto && !x.classList.contains('go')) x.classList.add('go', 'q'); });
+}
+// is a card there to see? Not "no piece of the picture round it still waits for its beat": its 'out' (goes when the
+// reading goes on after the puzzle) and its 'hop' (when its option is read out) wait for later beats while the card
+// is already on the screen. So: not scaled to nothing, not faded out by a piece round it
+/** @param {Element} el */
+function cardShown(el) {
+  if (!el.getBoundingClientRect().width) return false;
+  for (let a = /** @type {Element | null} */ (el); a && a.tagName !== 'svg'; a = a.parentElement) if (+getComputedStyle(a).opacity === 0) return false;
+  return true;
+}
+// a choice card counts the moment it shows, even while the voice is still reading the other options: the puzzle opens
+// at that tap (capture phase, so a series' own card handling, 故事大王's data-retry, sees an open puzzle). The cards had
+// shown for about 6 s before a tap did anything (龟兔赛跑 第 4 幕, 三只小猪 第 10 幕)
+document.addEventListener('click', (e) => {
+  const t = /** @type {Element} */ (e.target).closest('.tap[data-choice]'), pg = t && t.closest('.pg'), pz = pg && P(pg);
+  if (!pz || pz.dataset.started || pg.classList.contains('solved') || !cardShown(t)) return;
+  skipLeadIn(pg);
+  startPuzzle(pg);
+}, true);
+
 function openAsk(pg) {
   const a = P(pg).querySelector('.ask:not(.ok)');
   if (!a) return solved(pg);
@@ -178,8 +204,9 @@ function onFind(pg, t) {
   t.classList.add('found');
   const all = !pg.querySelector('[data-find]:not(.found)');
   // a thing with a line of its own says it first (故事大王: each pig says what he does)
-  if (t.dataset.say) { stop(); say(t.dataset.say).then((ok) => ok && all && speakThen(pz.dataset.done, () => openAsk(pg))); return; }
+  if (t.dataset.say) { stop(); say(t.dataset.say).then((ok) => { if (ok && all) speakThen(pz.dataset.done, () => openAsk(pg)); else if (ok && pz.dataset.more) say(pz.dataset.more); }); return; }
   if (all) speakThen(pz.dataset.done, () => openAsk(pg));
+  else if (pz.dataset.more) speakThen(pz.dataset.more);
 }
 
 // pattern puzzle: the next empty place pulses; a chip fills it if it is what the pattern needs
@@ -484,6 +511,196 @@ PUZZLE_TAP.bundle = (pg, t) => {
   return true;
 };
 
+// Playing the treasures and the places they go to (giveItem, giveTarget: give.js) of a 'give' puzzle or a give step,
+// loaded after player.js; needs steps.play.js. One finger at a time:
+//   pressed   the treasure is .up (the swallow shows, carrying it), its sound plays, [data-taken~=id] get .taken,
+//             svg.scene .pz-dragging (the empty places glow)
+//   moved     it follows the finger (style transform, in its parent's units), the swallow faces the way it goes (.west),
+//             the place under the finger is .over
+//   let go    on an empty place: it flies in (.given), the place .lit, its sound, bubble and line; on a place already lit:
+//             home, and the step's full line (else miss); anywhere else: home and miss (just tapped, not moved: the hint)
+/** @type {null | { pg: Element, el: SVGGElement, id: number, from: DOMPoint, moved: boolean }} */
+let pzCarried = null;
+// the place of this step a finger at e is over: inside its box, or up to 24 outside it
+/** @param {Element} pg  @param {{ clientX: number, clientY: number }} e */
+function pzPlaceAt(pg, e) {
+  const k = pzStageNow(P(pg));
+  return [...pzScene(pg).querySelectorAll(`.pz-to[data-step="${k}"]`)].find((to) => {
+    const [x, y, w, h] = to.getAttribute('data-box').split(',').map(Number), p = pzLocal(to, e);
+    return p.x > x - 24 && p.x < x + w + 24 && p.y > y - 24 && p.y < y + h + 24;
+  });
+}
+// the treasure's things in the picture, taken (or put back)
+/** @param {Element} pg  @param {Element} el */
+function pzTaken(pg, el, on) {
+  const id = el.getAttribute('data-give');
+  pzScene(pg).querySelectorAll('[data-taken]').forEach((t) => { if (t.getAttribute('data-taken').split(' ').includes(id)) t.classList.toggle('taken', on); });
+}
+document.addEventListener('pointerdown', (e) => {
+  const el = /** @type {SVGGElement} */ (e.target.closest('.pz-give')), pg = el && el.closest('.pg');
+  if (!el || pzCarried || el.classList.contains('given') || el.classList.contains('back') || !pzLive(el)) return;
+  e.preventDefault();
+  pzTouched(pg, true);
+  pzCarried = { pg, el, id: e.pointerId, from: pzLocal(el, e), moved: false };
+  // she sets off facing the places still empty
+  const sc = pzScene(pg), home = +el.getAttribute('data-x'), k = pzStageNow(P(pg));
+  const xs = [...sc.querySelectorAll(`.pz-to[data-step="${k}"]:not(.lit)`)].map((to) => { const [x, , w] = to.getAttribute('data-box').split(',').map(Number); return x + w / 2; });
+  el.classList.toggle('west', xs.length > 0 && xs.reduce((a, b) => a + b, 0) / xs.length < home);
+  el.classList.add('up');
+  sc.classList.add('pz-dragging');
+  pzTaken(pg, el, true);
+  pzSfx(pg, el.getAttribute('data-sfx'));
+});
+document.addEventListener('pointermove', (e) => {
+  const c = pzCarried;
+  if (!c || e.pointerId !== c.id) return;
+  if (!c.el.isConnected) { pzCarried = null; return; }
+  const p = pzLocal(c.el, e), dx = p.x - c.from.x, dy = p.y - c.from.y;
+  if (Math.hypot(dx, dy) > 10) c.moved = true;
+  c.el.style.transform = `translate(${dx}px, ${dy}px)`;
+  // she turns when the finger goes clearly the other way
+  const last = +(c.el.getAttribute('data-lx') || dx);
+  if (dx < last - 14) c.el.classList.add('west');
+  if (dx > last + 14) c.el.classList.remove('west');
+  if (Math.abs(dx - last) > 14 || !c.el.hasAttribute('data-lx')) c.el.setAttribute('data-lx', String(dx));
+  const over = pzPlaceAt(c.pg, e);
+  pzScene(c.pg).querySelectorAll('.pz-to').forEach((to) => to.classList.toggle('over', to === over));
+});
+/** @param {PointerEvent} e */
+const pzLetGo = (e) => {
+  const c = pzCarried;
+  if (!c || e.pointerId !== c.id) return;
+  pzCarried = null;
+  const { pg, el } = c, sc = pzScene(pg), pz = P(pg);
+  sc.classList.remove('pz-dragging');
+  sc.querySelectorAll('.pz-to.over').forEach((to) => to.classList.remove('over'));
+  el.removeAttribute('data-lx');
+  pzTouched(pg);
+  if (!el.isConnected || !pz) return;
+  const spec = pzStepNow(pz), to = e.type === 'pointerup' && pzPlaceAt(pg, e);
+  if (to && !to.classList.contains('lit')) return pzGive(pg, el, to, spec);
+  // home again: she flies it back, then the treasure is in its place again
+  el.classList.remove('up');
+  el.classList.add('back');
+  el.style.transform = '';
+  setTimeout(() => { el.classList.remove('back'); pzTaken(pg, el, false); }, 460);
+  if (e.type !== 'pointerup') return;
+  pzSay(pg, to ? spec.full || spec.miss : c.moved ? spec.miss : spec.hint || pz.getAttribute('data-hint'));
+};
+document.addEventListener('pointerup', pzLetGo);
+document.addEventListener('pointercancel', pzLetGo);
+// el is given to the place `to`: it flies to its middle and stays there; the place lights up and says its line (a place
+// with no line of its own says the step's next one)
+/** @param {Element} pg  @param {SVGGElement} el  @param {Element} to  @param {PuzzleStep} spec */
+function pzGive(pg, el, to, spec) {
+  const pz = P(pg), sc = pzScene(pg), [x, y, w, h] = to.getAttribute('data-box').split(',').map(Number);
+  const mid = pzInScene(to, x + w / 2, y + h / 2), home = pzInScene(el, +el.getAttribute('data-x'), +el.getAttribute('data-y'));
+  const m = /** @type {SVGGraphicsElement} */ (el.parentNode).getScreenCTM().inverse().multiply(sc.getScreenCTM());
+  const d = new DOMPoint(mid.x - home.x, mid.y - home.y, 0, 0).matrixTransform(m);   // the way there, in el's parent's units
+  el.classList.add('given');
+  el.style.transform = `translate(${d.x}px, ${d.y}px)`;
+  to.classList.add('lit');
+  pzMark(sc, 'data-lit', to.getAttribute('data-to'));
+  pzMark(sc, 'data-given', el.getAttribute('data-give'));
+  if (to.querySelector('.pz-bubble')) pzReplay(to, 'pz-bub');
+  pzSfx(pg, to.getAttribute('data-sfx'));
+  let line = pzLines(to)[0];
+  if (!line && spec.lines) {
+    const n = +(pz.getAttribute('data-said') || 0);
+    line = spec.lines[n % spec.lines.length];
+    pz.setAttribute('data-said', String(n + 1));
+  }
+  pzSay(pg, line);
+  pzCheck(pg);
+}
+
+// Playing the things to hold down (holdSpot, hold.js) of a 'hold' puzzle or a hold step, loaded after player.js; needs
+// steps.play.js. A finger on it (one at a time):
+//   held      .holding (svg.scene .pz-holding), the ring fills (data-p, 0 … 1, and the ring's stroke-dashoffset) in
+//             data-ms; at half .mid (svg.scene .pz-mid; both stay) and the sound of its .pz-midfx, full: .held (svg.scene
+//             .pz-held), its sound, the step may be done (pzCheck)
+//   let go    before it is full: the ring slowly empties (as slowly as it fills, at least 2 s for a full ring) and the
+//             release line is said (the thing's own, else the step's); pressed again meanwhile, it fills on from there
+// The finger may wander off the thing while it holds: only lifting it counts (a five-year-old's finger slides).
+// data-p and the classes are on the page, so player.js's fresh() puts them back; the loop stops once its element is gone.
+
+/** @type {null | { pg: Element, el: Element, id: number }} */
+let pzHeld = null;
+const PZ_EMPTY_MS = 2000;   // a full ring empties as slowly as it filled, and never faster than this
+// the ring shows p (0 … 1)
+/** @param {Element} el  @param {number} p */
+function pzRing(el, p) {
+  el.setAttribute('data-p', p.toFixed(3));
+  const ring = el.querySelector('.pz-ring');
+  if (ring) ring.setAttribute('stroke-dashoffset', (100 - 100 * p).toFixed(2));
+}
+// one loop per thing: fills while held, empties while not, stops when empty, full or gone
+/** @type {WeakSet<Element>} */
+const pzHoldLoops = new WeakSet();
+/** @param {Element} pg  @param {Element} el */
+function pzHoldLoop(pg, el) {
+  if (pzHoldLoops.has(el)) return;
+  pzHoldLoops.add(el);
+  const ms = +el.getAttribute('data-ms') || 2000;
+  let last = performance.now();
+  const tick = (/** @type {number} */ now) => {
+    const dt = Math.max(0, Math.min(100, now - last));   // a tab in the background does not jump the ring full; a frame's time may be a little before the press that started the loop
+    last = now;
+    if (!el.isConnected || el.classList.contains('held')) { pzHoldLoops.delete(el); return; }
+    const holding = el.classList.contains('holding');
+    let p = +(el.getAttribute('data-p') || 0) + (holding ? dt / ms : -dt / Math.max(ms, PZ_EMPTY_MS));
+    if (p <= 0 && !holding) { pzRing(el, 0); pzHoldLoops.delete(el); return; }
+    if (p >= 0.5 && !el.classList.contains('mid')) {
+      const fx = el.querySelector('.pz-midfx');
+      el.classList.add('mid');
+      pzScene(pg).classList.add('pz-mid');
+      if (fx) pzSfx(pg, fx.getAttribute('data-sfx'));
+    }
+    if (p >= 1) { pzRing(el, 1); pzHoldLoops.delete(el); pzHoldFull(pg, el); return; }
+    pzRing(el, p);
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+/** @param {Element} pg  @param {Element} el */
+function pzHoldFull(pg, el) {
+  if (pzHeld && pzHeld.el === el) pzHeld = null;
+  el.classList.remove('holding');
+  el.classList.add('held');
+  pzScene(pg).classList.remove('pz-holding');
+  pzScene(pg).classList.add('pz-held');
+  pzTouched(pg);
+  pzSfx(pg, el.getAttribute('data-sfx'));
+  pzCheck(pg);
+}
+document.addEventListener('pointerdown', (e) => {
+  const el = e.target.closest('.pz-hold'), pg = el && el.closest('.pg');
+  if (!el || pzHeld || el.classList.contains('held') || !pzLive(el)) return;
+  e.preventDefault();
+  pzTouched(pg, true);
+  pzHeld = { pg, el, id: e.pointerId };
+  el.classList.add('holding');
+  pzScene(pg).classList.add('pz-holding');
+  pzHoldLoop(pg, el);
+});
+/** @param {PointerEvent} e */
+const pzHoldUp = (e) => {
+  const h = pzHeld;
+  if (!h || e.pointerId !== h.id) return;
+  pzHeld = null;
+  const { pg, el } = h;
+  el.classList.remove('holding');
+  if (!el.isConnected) return;
+  pzScene(pg).classList.remove('pz-holding');
+  pzTouched(pg);
+  if (el.classList.contains('held')) return;
+  pzHoldLoop(pg, el);   // empties
+  const own = [...el.children].find((c) => c.getAttribute('data-k') === 'release'), pz = P(pg);
+  pzSay(pg, own ? own.getAttribute('data-say') : pz && pzStepNow(pz).release);
+};
+document.addEventListener('pointerup', pzHoldUp);
+document.addEventListener('pointercancel', pzHoldUp);
+
 // Playing puzzle 'pier' (written by pier.js), loaded after player.js: a board dropped on a pier sits in its next free place; the second one must make the pier's number with the
 // first, or the bridge creaks and throws it back. A right pair that leaves another pier with no boards that fit is a
 // dead end (the pier turns red, the boards stay until taken off: tap one, or 全部拿下来); after three, the big hint.
@@ -565,6 +782,728 @@ PUZZLE_DROP.pour = (pg, d, b) => {
   else { stop(); say(pz.dataset.lines.split('|')[n] || '对啦！'); }
 };
 
+// Playing the puzzles 'tap', 'give', 'hold' and 'steps' (written by tap.js, give.js, hold.js, steps.js), loaded after
+// player.js. This file is what the four share; tap.play.js, give.play.js and hold.play.js play their own things and
+// need it. A tap / give / hold puzzle is a 'steps' puzzle of one step: the steps are in the block's data-steps.
+//
+// - A child who touches a thing of the first step before the voice has asked starts the puzzle at once (the reading
+//   stops, the picture is put where the skipped sentences would have moved it), and that same touch counts.
+// - Only the things of the step being done (.pz-now) can be touched; when the last of them is done (every .pz-tap
+//   .full, every .pz-to .lit, every .pz-hold .held) the step's done is said, then the next step starts: svg.scene's
+//   data-stage, stageIn / stageOut, and its intro said in words. After the last step, the page reads on.
+// - The lines are said one after another, never cutting each other off (the same line is not queued twice), and
+//   only while their page is open. Sound effects play next to the voice through 故事大王's sfx() (play.js) where the
+//   page has it; 逻辑世界 has none, there they take their turn in the line of sounds.
+// - A step left alone: after 8 s its hint is said once, in words; a give step shows a dashed arc from a treasure to
+//   a place after 5 s (第 4 幕), and again when the hint button is tapped.
+// - Everything done lives on the page (classes and data- on its elements), so player.js's fresh() puts it back.
+//   再听一遍 on a two-step page starts it over from the first step (剧本: 一页里两步的互动).
+
+const PZ_TYPES = ['tap', 'give', 'hold', 'steps'];
+/** @param {Element | null} pz */
+const pzIs = (pz) => !!pz && PZ_TYPES.includes(pz.dataset.type);
+/** @param {Element} pz  @returns {PuzzleStep[]} */
+const pzSteps = (pz) => JSON.parse(pz.getAttribute('data-steps') || '[]');
+/** @param {Element} pz */
+const pzStageNow = (pz) => +(pz.dataset.stage || 0);
+/** @param {Element} pz  @returns {PuzzleStep} */
+const pzStepNow = (pz) => pzSteps(pz)[pzStageNow(pz)] || { kind: 'tap' };
+/** @param {Element} pg */
+const pzScene = (pg) => /** @type {SVGSVGElement} */ (pg.querySelector('svg.scene'));
+/** @param {Element} el */
+const pzStepOf = (el) => +(el.getAttribute('data-step') || 0);
+// can the child work on el now: its page is open and asking, and el belongs to the step being done
+/** @param {Element} el */
+function pzLive(el) {
+  const pg = el.closest('.pg'), pz = pg && P(pg);
+  return pzIs(pz) && pg === pages[cur] && pg.classList.contains('asking') && !pg.classList.contains('solved') && pzStepOf(el) === pzStageNow(pz);
+}
+// (re)start a CSS animation on el by its class c
+/** @param {Element} el  @param {string} c */
+const pzReplay = (el, c) => { el.classList.remove(c); el.getBoundingClientRect(); el.classList.add(c); };
+// where a finger (or a point x, y of el's own drawing) is, in the drawing's units of el's parent (el may be moved by a
+// transform of its own, its parent never is)
+/** @param {Element} el  @param {{ clientX: number, clientY: number }} e */
+const pzLocal = (el, e) => new DOMPoint(e.clientX, e.clientY).matrixTransform(/** @type {SVGGraphicsElement} */ (el.parentNode).getScreenCTM().inverse());
+/** @param {Element} el  @returns {DOMPoint} the point (x, y) of el's parent, in svg.scene's own units */
+function pzInScene(el, x, y) {
+  const sc = /** @type {SVGGraphicsElement} */ (el).ownerSVGElement, par = /** @type {SVGGraphicsElement} */ (el.parentNode);
+  return new DOMPoint(x, y).matrixTransform(par.getScreenCTM()).matrixTransform(sc.getScreenCTM().inverse());
+}
+// a list of words in an attribute of svg.scene (data-lit="window bridge"): add one
+/** @param {Element} sc  @param {string} key */
+function pzMark(sc, key, word) {
+  const now = (sc.getAttribute(key) || '').split(' ').filter(Boolean);
+  if (!now.includes(word)) sc.setAttribute(key, [...now, word].join(' '));
+}
+
+// ---------------- what is said ----------------
+/** @type {WeakMap<Element, { q: Promise<any>, waiting: string[] }>} */
+const pzVoices = new WeakMap();
+// say text (or play file) once what is already waiting has been said; nothing once the page is turned or opened afresh
+/** @param {Element} pg  @param {string | null} text  @param {string} [file]  @returns {Promise<any>} */
+function pzSay(pg, text, file) {
+  const pz = P(pg);
+  if (!pz) return Promise.resolve(false);
+  const v = pzVoices.get(pz) || { q: Promise.resolve(true), waiting: [] }, key = file || text;
+  pzVoices.set(pz, v);
+  if (!key || v.waiting.includes(key)) return v.q;
+  v.waiting.push(key);
+  v.q = v.q.then(() => {
+    v.waiting.splice(v.waiting.indexOf(key), 1);
+    if (!pz.isConnected || pg !== pages[cur]) return false;
+    stop();
+    return say(text, file);
+  });
+  return v.q;
+}
+// once everything waiting has been said
+/** @param {Element} pg */
+const pzSaid = (pg) => (pzVoices.get(P(pg)) || { q: Promise.resolve(true) }).q;
+// a sound effect: next to the voice where the page has 故事大王's sfx(), else in the line
+/** @param {Element} pg  @param {string} [file] */
+function pzSfx(pg, file) {
+  if (!file) return;
+  const fx = /** @type {any} */ (window).sfx;
+  if (typeof fx === 'function') fx(file, 0.8);
+  else pzSay(pg, null, file);
+}
+// the lines a thing has in the picture (hidden .pz-line children)
+/** @param {Element} el  @returns {string[]} */
+const pzLines = (el) => [...el.children].filter((c) => c.classList.contains('pz-line')).map((c) => c.getAttribute('data-say'));
+
+// ---------------- steps ----------------
+PUZZLE_PLAY.tap = PUZZLE_PLAY.give = PUZZLE_PLAY.hold = PUZZLE_PLAY.steps = (pg) => pzStage(pg, 0);
+// step k starts: its things can be touched, the picture changes, its intro is said
+/** @param {Element} pg  @param {number} k */
+function pzStage(pg, k) {
+  const pz = P(pg), sc = pzScene(pg), spec = pzSteps(pz)[k] || /** @type {PuzzleStep} */ ({});
+  pz.dataset.stage = String(k);
+  sc.dataset.stage = String(k);
+  sc.querySelectorAll('.pz-x, .pz-to').forEach((e) => e.classList.toggle('pz-now', pzStepOf(e) === k));
+  sc.querySelectorAll('.pz-in, .pz-out').forEach((e) => e.classList.toggle('pz-on', +e.getAttribute('data-k') <= k));
+  // the button and the words under it tell how to do this step
+  const how = (k && spec.intro) || spec.hint || pz.dataset.hint, hint = spec.hint || spec.intro || pz.dataset.hint;
+  const btn = /** @type {HTMLElement} */ (pz.querySelector('.hint')), text = /** @type {HTMLElement} */ (pz.querySelector('.pz-how'));
+  if (btn && hint) btn.dataset.say = hint;
+  if (text && how) { text.dataset.say = how; text.textContent = how; }
+  if (k > 0 && spec.intro) pzSay(pg, spec.intro);
+  pzIdle(pg);
+}
+// is the step being done finished? then its done line, then the next step (or the rest of the page)
+/** @param {Element} pg */
+function pzCheck(pg) {
+  const pz = P(pg), sc = pzScene(pg), k = pzStageNow(pz);
+  const left = sc.querySelector(`.pz-tap[data-step="${k}"]:not(.full), .pz-to[data-step="${k}"]:not(.lit), .pz-hold[data-step="${k}"]:not(.held)`);
+  if (left || pz.dataset.over === String(k)) return;
+  pz.dataset.over = String(k);
+  const steps = pzSteps(pz), spec = steps[k] || /** @type {PuzzleStep} */ ({});
+  if (spec.done) pzSay(pg, spec.done);
+  pzSaid(pg).then(() => setTimeout(() => {
+    if (!pz.isConnected || pg !== pages[cur] || !pg.classList.contains('asking')) return;
+    if (k + 1 < steps.length) pzStage(pg, k + 1); else solved(pg);
+  }, 600));
+}
+
+// ---------------- a step left alone ----------------
+/** @type {WeakMap<Element, { last: number, stage: number, arc: boolean, said: boolean, busy: boolean }>} */
+const pzIdles = new WeakMap();
+// the child did something: the clock starts again and the arc goes
+/** @param {Element} pg */
+function pzTouched(pg, busy = false) {
+  const s = pzIdles.get(P(pg));
+  if (s) { s.last = performance.now(); s.busy = busy; s.arc = false; }
+  pzScene(pg).querySelectorAll('.pz-arc').forEach((a) => a.remove());
+}
+/** @param {Element} pg */
+function pzIdle(pg) {
+  const pz = P(pg), had = pzIdles.get(pz);
+  pzIdles.set(pz, { last: performance.now(), stage: pzStageNow(pz), arc: false, said: false, busy: false });
+  if (had) return;   // already watching this puzzle
+  const tick = () => {
+    const s = pzIdles.get(pz);
+    if (!pz.isConnected || !pg.classList.contains('asking') || pg.classList.contains('solved')) return;
+    setTimeout(tick, 500);
+    if (pg !== pages[cur]) return;
+    const now = performance.now(), spec = pzStepNow(pz);
+    if (s.busy) s.last = now;
+    if (spec.kind === 'give' && !s.arc && now - s.last > 5000) { s.arc = true; pzArc(pg); }
+    const hint = spec.hint || pz.dataset.hint;
+    if (!s.said && hint && now - s.last > 8000) { s.said = true; pzSay(pg, hint); }
+  };
+  setTimeout(tick, 500);
+}
+// a dashed arc from a treasure still at home to a place still empty, over everything
+/** @param {Element} pg */
+function pzArc(pg) {
+  const sc = pzScene(pg), k = pzStageNow(P(pg));
+  const item = sc.querySelector(`.pz-give[data-step="${k}"]:not(.given):not(.up)`), to = sc.querySelector(`.pz-to[data-step="${k}"]:not(.lit)`);
+  if (!item || !to || sc.querySelector('.pz-arc')) return;
+  const [x, y, w, h] = to.getAttribute('data-box').split(',').map(Number);
+  const a = pzInScene(item, +item.getAttribute('data-x'), +item.getAttribute('data-y')), b = pzInScene(to, x + w / 2, y + h / 2);
+  const mx = (a.x + b.x) / 2, my = Math.min(a.y, b.y) - Math.max(70, Math.abs(b.x - a.x) * 0.3);
+  const d = `M ${a.x.toFixed(1)} ${a.y.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}`;
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('class', 'pz-arc');
+  g.innerHTML = `<path d="${d}" fill="none" stroke="#3a1f0f" stroke-opacity=".5" stroke-width="9" stroke-dasharray="4 18" stroke-linecap="round"/>` +
+    `<path d="${d}" fill="none" stroke="#fff6b0" stroke-width="6" stroke-dasharray="4 18" stroke-linecap="round"/>` +
+    `<circle cx="${b.x.toFixed(1)}" cy="${b.y.toFixed(1)}" r="10" fill="#fff6b0" stroke="#3a1f0f" stroke-width="3"/>`;
+  sc.appendChild(g);
+}
+
+// ---------------- starting early, starting over ----------------
+// a finger on a thing of the first step before the voice has asked: the puzzle starts now, and this touch counts
+// (capture: before tap.play.js, give.play.js and hold.play.js look at it)
+document.addEventListener('pointerdown', (e) => {
+  const pg = pages[cur], pz = pg && P(pg);
+  if (!pzIs(pz) || pz.dataset.started || pg.classList.contains('solved') || !pg.contains(e.target) || !e.target.closest('.pz-x.pz-now')) return;
+  stop();
+  const list = beats(pg), first = list.findIndex((b) => b.classList.contains('after')), upto = first < 0 ? list.length : first;
+  pg.querySelectorAll('svg.scene [data-at]').forEach((x) => { if (+x.getAttribute('data-at') < upto && !x.classList.contains('go')) x.classList.add('go', 'q'); });
+  startPuzzle(pg);
+}, true);
+// 再听一遍 on a page of steps that has begun: from the first sentence and the first step
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('.again'), pg = b && b.closest('.pg'), pz = pg && P(pg);
+  if (!pz || pz.dataset.type !== 'steps' || !pz.dataset.started || pg.classList.contains('solved')) return;
+  e.stopPropagation();
+  fresh(pg);
+  narrate(pg);
+}, true);
+// a click on one of these puzzles' things was taken care of on pointerdown; the written step says itself; the hint
+// button shows the arc too (and player.js says it)
+const pzClick = (pg, t) => {
+  if (t.closest('.pz-how')) { stop(); say(t.closest('.pz-how').getAttribute('data-say')); return true; }
+  if (t.closest('.hint') && pzStepNow(P(pg)).kind === 'give' && pg.classList.contains('asking')) { pzTouched(pg); pzArc(pg); }
+  return !!t.closest('.pz-x');
+};
+PUZZLE_TAP.tap = PUZZLE_TAP.give = PUZZLE_TAP.hold = PUZZLE_TAP.steps = pzClick;
+// no long-press menu on a thing held down
+document.addEventListener('contextmenu', (e) => { if (e.target.closest && e.target.closest('.pz-x')) e.preventDefault(); });
+// these pages: no scrolling, zooming or selecting on the picture while the child presses and drags (steps.css)
+document.querySelectorAll('.puzzle').forEach((pz) => { if (pzIs(pz)) pz.closest('.pg').classList.add('pz-hands'); });
+
+// Playing the things to tap (tapSpot, tap.js) of a 'tap' puzzle or a tap step, loaded after player.js; needs
+// steps.play.js. On the touch itself (not the click after it): it flashes (.flash, set again each time), plays its
+// sound, its bubble pops up (.pz-bub), and its line is said. Tapped again: the same once more. A thing tapped many
+// times (o.lines) says the next line each time; data-hits counts on it and on svg.scene, and it is .full after the
+// last. Once the page has read on, a tap only flashes it (the voice is reading).
+document.addEventListener('pointerdown', (e) => {
+  const el = e.target.closest('.pz-tap'), pg = el && el.closest('.pg');
+  if (!el || pg !== pages[cur] || !pzIs(P(pg))) return;
+  if (pg.classList.contains('solved')) { if (el.classList.contains('hit')) pzReplay(el, 'flash'); return; }
+  if (!pzLive(el)) return;
+  e.preventDefault();
+  pzTouched(pg);
+  const lines = pzLines(el), n = lines.length, was = +el.getAttribute('data-hits'), more = was < n;
+  pzReplay(el, 'flash');
+  if (n > 1 && !more) return;   // a thing tapped many times, all of them done
+  const hits = Math.min(n, was + 1);
+  el.setAttribute('data-hits', String(hits));
+  if (n > 1) pzScene(pg).setAttribute('data-hits', String(hits));
+  el.classList.add('hit');
+  if (el.querySelector('.pz-bubble')) pzReplay(el, 'pz-bub');
+  pzSfx(pg, el.getAttribute('data-sfx'));
+  pzSay(pg, lines[hits - 1]);
+  if (hits >= n) { el.classList.add('full'); pzCheck(pg); }
+});
+
+// Playing puzzle 'trek' (written by trek.js; what each move does: 故事大王/龟兔赛跑/互动约定.md, TrekPuzzle in shared/types.d.ts).
+// Loaded after player.js. 故事大王 has play.js too, whose sfx() plays a sound next to the voice; the published player.js
+// has this file joined on before play.js, and 逻辑世界 has no play.js at all: so sfx() is looked for when a sound plays,
+// and without it the sound plays on the voice's own element.
+//
+// What has been done lives on the page: the puzzle's data-m (the move being done), data-k (its steps walked), the parts'
+// classes and transforms. A page opened again (or heard again once solved) is put back clean by player.js's fresh() and
+// starts over; a timer left from before finds its puzzle gone (or the page turned) and does nothing.
+//
+// A child who touches a part of the first move before the voice has asked for it starts the work at once (as play.js's
+// build does): the reading stops, the picture is put where the skipped sentences would have moved it, the touch counts.
+
+const trekMoves = (/** @type {Element} */ pz) => /** @type {any[]} */ (JSON.parse(pz.getAttribute('data-moves')));
+const trekSc = (/** @type {Element} */ pg) => /** @type {SVGSVGElement} */ (pg.querySelector('svg.scene'));
+const trekNow = () => performance.now();
+// move m of this puzzle is still being done, on the page open now
+/** @param {HTMLElement} pz */
+const trekCur = (pz, m) => pz.isConnected && pz.closest('.pg') === pages[cur] && +pz.dataset.m === m && !pz.dataset.over;
+/** @param {Element} el  @param {string} c */
+const trekReplay = (el, c) => { el.classList.remove(c); el.getBoundingClientRect(); el.classList.add(c); };
+// the pieces of the picture matching sel move (.go), or are put back (on = false)
+function trekGo(pg, sel, on = true) {
+  trekSc(pg).querySelectorAll(sel).forEach((e) => e.classList.toggle('go', on));
+}
+// parts of move m (of the ones that take part in moves)
+const trekParts = (pg, m) => [...trekSc(pg).querySelectorAll(`.trek[data-m="${m}"], .trek-seat[data-m="${m}"], .trek-rival[data-m="${m}"]`)];
+const trekOne = (pg, cls, m) => /** @type {SVGGElement} */ (trekSc(pg).querySelector(`.${cls}[data-m="${m}"]`));
+
+// ---------------- sound ----------------
+function trekSfx(file, gain = 0.8) {
+  if (!file) return;
+  // @ts-ignore: sfx() is 故事大王/play.js's (it plays next to the voice); 逻辑世界 has none
+  if (typeof sfx === 'function') { sfx(file, gain); return; }
+  say(null, file);
+}
+// lines are said one after another, never cutting each other off (play.js's line(), but with a check made just before
+// each line is said: still() false = skip it, e.g. a move's "what to do" once the child has done it already); nothing is
+// said once the page is turned or put back
+/** @type {WeakMap<Element, Promise<boolean>>} */
+const trekQueue = new WeakMap();
+/** @param {HTMLElement} pz  @param {string} text  @returns {Promise<boolean>} */
+function trekSay(pz, text, still = () => true) {
+  const q = (trekQueue.get(pz) || Promise.resolve(true)).then(() => {
+    if (!text || !pz.isConnected || pz.closest('.pg') !== pages[cur] || !still()) return true;
+    stop();
+    return say(text);
+  });
+  trekQueue.set(pz, q);
+  return q;
+}
+
+// ---------------- the race map: a head on [data-mapme] / [data-maprival] moves along its data-path ----------------
+// t (0–1) is a point along the path: by data-ts (the t of each corner of the path, "0,0.25,0.5,0.6,1") when the head has
+// it, else by length. A head placed with transform="translate(x y)" (drawn round 0,0: common.js's raceMap) is put at the
+// point itself; one drawn in place, at its data-t (else at fallback t0), is moved from there.
+/** @param {Element} el  @param {number} t */
+function trekPathAt(el, t) {
+  const pts = el.getAttribute('data-path').trim().split(/\s+/).map((p) => p.split(',').map(Number));
+  if (pts.length < 2) return pts[0] || [0, 0];
+  const len = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
+  const total = len.reduce((a, b) => a + b, 0);
+  let ts = (el.getAttribute('data-ts') || '').split(',').filter(Boolean).map(Number);
+  if (ts.length !== pts.length) ts = pts.map((_, i) => len.slice(0, i).reduce((a, b) => a + b, 0) / total);
+  const u = Math.min(ts[ts.length - 1], Math.max(ts[0], t));
+  let i = 0;
+  while (i < pts.length - 2 && u > ts[i + 1]) i++;
+  const f = ts[i + 1] > ts[i] ? (u - ts[i]) / (ts[i + 1] - ts[i]) : 0;
+  return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * f, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * f];
+}
+/** @param {Element} pg  @param {string} sel  @param {number} t  @param {number} secs  @param {number} t0 */
+function trekMapTo(pg, sel, t, secs, t0) {
+  trekSc(pg).querySelectorAll(sel).forEach((/** @type {SVGGElement} */ el) => {
+    if (!el.getAttribute('data-path')) return;
+    if (el.dataset.t0 == null) el.dataset.t0 = el.hasAttribute('transform') ? 'place' : el.dataset.t != null ? el.dataset.t : String(t0);
+    const [x, y] = trekPathAt(el, t), [x0, y0] = el.dataset.t0 === 'place' ? [0, 0] : trekPathAt(el, +el.dataset.t0);
+    el.style.transition = secs ? `transform ${secs}s ease-out` : 'none';
+    el.style.transform = `translate(${(x - x0).toFixed(1)}px, ${(y - y0).toFixed(1)}px)`;
+    el.dataset.t = t.toFixed(3);   // where it is now
+  });
+}
+const trekRange = (s) => (s || '').split(',').map(Number);
+
+// ---------------- moves ----------------
+PUZZLE_PLAY.trek = (pg, pz) => trekStart(pg, /** @type {HTMLElement} */ (pz), 0);
+/** @param {Element} pg  @param {HTMLElement} pz  @param {number} m */
+function trekStart(pg, pz, m) {
+  const mv = trekMoves(pz)[m], sc = trekSc(pg);
+  pz.dataset.m = String(m);
+  pz.dataset.k = '0';
+  ['over', 'acted', 'talking', 'queued', 'nudged', 'race', 'tap', 'busy'].forEach((k) => delete pz.dataset[k]);
+  sc.querySelectorAll('.trek[data-m], .trek-seat[data-m], .trek-rival[data-m]').forEach((e) => e.classList.toggle('now', +e.dataset.m === m));
+  trekGo(pg, `[data-on="${m}"]`);
+  // what to do, in words: the 不会做？ button and the line under the work say it (move 0's is in the page's own sentences)
+  const how = mv.intro || pz.dataset.hint, hint = /** @type {HTMLElement} */ (pz.querySelector('.hint')), told = pz.querySelector('.trek-how');
+  if (hint) hint.dataset.say = how;
+  if (told) { told.setAttribute('data-say', how); told.textContent = how; }
+  if (m > 0 && mv.intro) trekSay(pz, mv.intro, () => trekCur(pz, m) && !pz.dataset.acted);
+  if (mv.kind === 'race') trekRaceArm(pg, pz, m, mv, true);
+  trekButtons(pg, pz, m, mv);
+  trekIdle(pg, pz, m, mv);
+}
+// move m is done: its parts are done with, what waits for it moves, its lines are said; the next move starts after
+// `wait` ms (once its own movement is over), or after the last move and its lines, the page reads on
+/** @param {Element} pg  @param {HTMLElement} pz  @param {number} m */
+function trekDone(pg, pz, m, wait = 400) {
+  const moves = trekMoves(pz), mv = moves[m];
+  pz.dataset.over = '1';
+  trekParts(pg, m).forEach((e) => { e.classList.remove('now'); e.classList.add('was'); });
+  trekGo(pg, `[data-done="${m}"]`);
+  (mv.says || []).forEach((t) => trekSay(pz, t));
+  if (m + 1 < moves.length) {
+    setTimeout(() => { if (pz.isConnected && +pz.dataset.m === m && pz.closest('.pg') === pages[cur]) trekStart(pg, pz, m + 1); }, wait);
+    return;
+  }
+  trekQueue.get(pz) || trekQueue.set(pz, Promise.resolve(true));
+  trekQueue.get(pz).then(() => setTimeout(() => {
+    if (pz.isConnected && pg === pages[cur] && pg.classList.contains('asking') && !pg.classList.contains('solved')) solved(pg);
+  }, Math.max(wait, 600)));
+}
+// a move left alone for 8 s says once more what to do (a race has its own nudge)
+function trekIdle(pg, pz, m, mv) {
+  pz.dataset.last = String(trekNow());
+  if (mv.kind === 'race') return;
+  const check = () => {
+    if (!trekCur(pz, m) || pz.dataset.nudged) return;
+    const idle = trekNow() - +pz.dataset.last;
+    if (pz.dataset.talking || pz.dataset.busy || trekHeld || idle < 8000) { setTimeout(check, 1000); return; }
+    pz.dataset.nudged = '1';
+    trekSay(pz, mv.intro || pz.dataset.hint, () => trekCur(pz, m));
+  };
+  setTimeout(check, 8000);
+}
+// the footprint button (and the walker) can be tapped: not while lines are said, nor once every step is walked
+function trekButtons(pg, pz, m, mv) {
+  const off = !!pz.dataset.talking || +pz.dataset.k >= (mv.n || 0) || pz.dataset.race === 'lost';
+  trekSc(pg).querySelectorAll(`.trek-btn[data-m="${m}"]`).forEach((b) => b.classList.toggle('off', off));
+}
+
+// ---------------- step and race: a tap = one step ----------------
+/** @param {Element} pg  @param {HTMLElement} pz  @param {number} m */
+function trekTap(pg, pz, m, mv) {
+  const w = trekOne(pg, 'trek-walker', m), k = +pz.dataset.k;
+  if (!w || k >= mv.n || pz.dataset.talking || pz.dataset.race === 'lost') return;
+  trekSc(pg).querySelectorAll(`.trek-btn[data-m="${m}"]`).forEach((b) => trekReplay(b, 'press'));
+  pz.dataset.acted = '1';
+  if (mv.kind === 'race') {
+    pz.dataset.tap = String(trekNow());
+    if (!pz.dataset.race) trekRival(pg, pz, m, mv);
+  }
+  if (mv.quietFrom != null && k >= mv.quietFrom) {   // the quiet stretch: a step only once the last one is over by `gap` ms
+    if (w.classList.contains('stepping') || trekNow() - +(pz.dataset.end || 0) < (mv.gap == null ? 1000 : mv.gap)) return trekTooFast(pg, pz, mv);
+    return trekStep(pg, pz, m, mv);
+  }
+  // tapped while he walks: he takes one more step straight after this one, however many taps came meanwhile
+  if (w.classList.contains('stepping')) { pz.dataset.queued = '1'; return; }
+  trekStep(pg, pz, m, mv);
+}
+function trekStep(pg, pz, m, mv) {
+  const w = trekOne(pg, 'trek-walker', m), k = +pz.dataset.k, tries = pz.dataset.tries || '';
+  const pts = w.dataset.pts.split(' ').map((p) => p.split(',').map(Number)), to = pts[Math.min(k + 1, pts.length - 1)];
+  const quiet = mv.quietFrom != null && k >= mv.quietFrom;
+  w.style.transition = `transform ${mv.pace}s ease-in-out`;
+  w.style.setProperty('--pace', `${mv.pace}s`);
+  trekReplay(w, 'stepping');
+  w.style.transform = `translate(${to[0] - pts[0][0]}px, ${to[1] - pts[0][1]}px)`;
+  trekSc(pg).querySelectorAll(`.trek-leaf[data-m="${m}"]`).forEach((l) => l.classList.remove('ready'));
+  trekSfx(quiet ? mv.quietSfx || mv.sfx : mv.sfx, quiet ? 0.5 : 0.8);
+  if (w.dataset.map) { const [a, b] = trekRange(w.dataset.map); trekMapTo(pg, '[data-mapme]', a + ((b - a) * (k + 1)) / mv.n, mv.pace, a); }
+  setTimeout(() => trekStepped(pg, pz, m, mv, tries), mv.pace * 1000);
+}
+function trekStepped(pg, pz, m, mv, tries) {
+  if (!trekCur(pz, m) || (pz.dataset.tries || '') !== tries || pz.dataset.race === 'lost') return;
+  const w = trekOne(pg, 'trek-walker', m), sc = trekSc(pg), k = +pz.dataset.k + 1;
+  w.classList.remove('stepping');
+  pz.dataset.k = w.dataset.k = String(k);
+  pz.dataset.end = String(trekNow());
+  sc.querySelectorAll(`.trek-trail[data-m="${m}"][data-i="${k - 1}"]`).forEach((e) => e.classList.add('on'));
+  trekGo(pg, `[data-ev="${m}:${k}"]`);
+  if (k >= mv.n) {
+    trekButtons(pg, pz, m, mv);
+    if (mv.kind === 'race') pz.dataset.race = 'won';   // the rival runs on, and comes in after him
+    return trekDone(pg, pz, m, 500);
+  }
+  const quiet = mv.quietFrom != null && k >= mv.quietFrom;
+  if (quiet) {
+    w.classList.add('quiet');
+    sc.querySelectorAll(`.trek-leaf[data-m="${m}"]`).forEach((l) => l.classList.add('shown'));
+    trekLeafLater(pg, pz, m, mv, k);
+  }
+  const said = mv.lines && mv.lines[k];
+  if (said && said.length) { delete pz.dataset.queued; trekTalk(pg, pz, m, mv, k, said); return; }
+  if (quiet) { delete pz.dataset.queued; return; }   // a step in the quiet stretch is only ever a tap of its own
+  if (pz.dataset.queued) { delete pz.dataset.queued; trekStep(pg, pz, m, mv); }
+}
+// the leaf turns green once the next quiet step may be taken
+function trekLeafLater(pg, pz, m, mv, k) {
+  setTimeout(() => {
+    if (!trekCur(pz, m) || +pz.dataset.k !== k || pz.dataset.talking) return;
+    trekSc(pg).querySelectorAll(`.trek-leaf[data-m="${m}"]`).forEach((l) => l.classList.add('ready'));
+  }, mv.gap == null ? 1000 : mv.gap);
+}
+// lines after step k: he stops, nothing can be tapped until they are said (data-while="m:k" pieces show meanwhile)
+async function trekTalk(pg, pz, m, mv, k, said) {
+  const w = trekOne(pg, 'trek-walker', m);
+  pz.dataset.talking = String(k);
+  w.classList.add('talking');
+  trekButtons(pg, pz, m, mv);
+  trekGo(pg, `[data-while="${m}:${k}"]`);
+  for (const t of said) await trekSay(pz, t);
+  if (!trekCur(pz, m)) return;
+  delete pz.dataset.talking;
+  w.classList.remove('talking');
+  trekGo(pg, `[data-while="${m}:${k}"]`, false);
+  trekButtons(pg, pz, m, mv);
+  pz.dataset.last = String(trekNow());
+  if (mv.quietFrom != null && k >= mv.quietFrom) { pz.dataset.end = String(trekNow() - 99999); trekLeafLater(pg, pz, m, mv, k); }
+}
+// too fast in the quiet stretch: he does not step; the sleeper's ear twitches; "嘘……" at most once in 4 s
+function trekTooFast(pg, pz, mv) {
+  trekSc(pg).querySelectorAll('.hare-ear-twitch').forEach((e) => trekReplay(e, 'twitch'));
+  trekSc(pg).querySelectorAll(`.trek-walker[data-m="${pz.dataset.m}"]`).forEach((w) => trekReplay(w, 'halt'));
+  trekSfx(mv.fastSfx, 0.7);
+  if (mv.tooFast && trekNow() - +(pz.dataset.fast || -1e9) >= 4000) {
+    pz.dataset.fast = String(trekNow());
+    trekSay(pz, mv.tooFast);
+  }
+}
+
+// ---------------- the race: the rival runs on his own; first there wins ----------------
+// a race (re)starts: the rival waits for the child's first tap, or (the first time only) 4 s
+function trekRaceArm(pg, pz, m, mv, first) {
+  const tries = String(+(pz.dataset.tries || 0) + 1);
+  pz.dataset.tries = tries;
+  delete pz.dataset.race;
+  if (first) setTimeout(() => { if (trekCur(pz, m) && pz.dataset.tries === tries && !pz.dataset.race) trekRival(pg, pz, m, mv); }, 4000);
+}
+function trekRival(pg, pz, m, mv) {
+  const r = trekOne(pg, 'trek-rival', m), body = r && /** @type {SVGGElement} */ (r.querySelector(':scope > .trek-body'));
+  const tries = pz.dataset.tries, t0 = trekNow(), secs = mv.rivalTime || 9;
+  pz.dataset.race = 'run';
+  if (!pz.dataset.tap) pz.dataset.tap = String(t0);
+  if (body) {
+    body.style.transition = `transform ${secs}s linear`;
+    body.style.transform = `translate(${r.dataset.dx}px, ${r.dataset.dy}px)`;
+    r.classList.add('running');
+  }
+  setTimeout(() => { if (trekCur(pz, m) && pz.dataset.tries === tries && pz.dataset.race === 'run') trekLost(pg, pz, m, mv); }, secs * 1000);
+  const [a, b] = r && r.dataset.map ? trekRange(r.dataset.map) : [];
+  const tick = () => {
+    if (!pz.isConnected || pz.dataset.tries !== tries || !(pz.dataset.race === 'run' || pz.dataset.race === 'won')) return;
+    const f = Math.min(1, (trekNow() - t0) / (secs * 1000));
+    if (a != null) trekMapTo(pg, '[data-maprival]', a + (b - a) * f, 0, a);
+    // 2 s without a tap: "别停！再走一步！", once a race
+    if (pz.dataset.race === 'run' && !pz.dataset.nudged && mv.nudge && trekNow() - +pz.dataset.tap > 2000) {
+      pz.dataset.nudged = '1';
+      trekSay(pz, mv.nudge, () => pz.dataset.race === 'run');
+    }
+    if (f < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+// the rival got there first: the whistle, the lines, and both go back to the start to run it again
+function trekLost(pg, pz, m, mv) {
+  pz.dataset.race = 'lost';
+  delete pz.dataset.queued;
+  trekButtons(pg, pz, m, mv);
+  const r = trekOne(pg, 'trek-rival', m);
+  if (r) r.classList.remove('running');
+  trekSfx(mv.whistle, 0.8);
+  trekGo(pg, '[data-lose]');
+  (mv.lose || []).forEach((t) => trekSay(pz, t));
+  trekQueue.get(pz).then(() => setTimeout(() => { if (trekCur(pz, m) && pz.dataset.race === 'lost') trekRaceReset(pg, pz, m, mv); }, 400));
+}
+function trekRaceReset(pg, pz, m, mv) {
+  const sc = trekSc(pg), w = trekOne(pg, 'trek-walker', m), r = trekOne(pg, 'trek-rival', m);
+  const body = r && /** @type {SVGGElement} */ (r.querySelector(':scope > .trek-body'));
+  [w, body].forEach((el) => { if (el) { el.style.transition = 'none'; el.style.transform = ''; } });
+  if (r) r.classList.remove('running');
+  if (w) { w.classList.remove('stepping', 'quiet', 'talking'); w.dataset.k = '0'; }
+  pz.dataset.k = '0';
+  ['queued', 'nudged', 'tap', 'end'].forEach((k) => delete pz.dataset[k]);
+  sc.querySelectorAll(`.trek-trail[data-m="${m}"]`).forEach((e) => e.classList.remove('on'));
+  trekGo(pg, `[data-ev^="${m}:"]`, false);
+  trekGo(pg, '[data-lose]', false);
+  if (w && w.dataset.map) trekMapTo(pg, '[data-mapme]', trekRange(w.dataset.map)[0], 0.4, trekRange(w.dataset.map)[0]);
+  if (r && r.dataset.map) trekMapTo(pg, '[data-maprival]', trekRange(r.dataset.map)[0], 0.4, trekRange(r.dataset.map)[0]);
+  trekRaceArm(pg, pz, m, mv, false);
+  trekButtons(pg, pz, m, mv);
+}
+
+// ---------------- tap, swipe ----------------
+function trekTapOne(pg, pz, m, mv, el) {
+  if (el.classList.contains('did')) return;
+  el.classList.add('did');
+  trekSfx(mv.sfx);
+  trekDone(pg, pz, m, 500);
+}
+function trekRun(pg, pz, m, mv, el) {
+  if (el.classList.contains('ran')) return;
+  const body = /** @type {SVGGElement} */ (el.querySelector(':scope > .trek-body')), secs = parseFloat(body.style.transitionDuration) || 0.6;
+  el.classList.add('ran');
+  body.style.transform = `translate(${el.dataset.dx}px, ${el.dataset.dy}px)`;
+  trekSfx(mv.sfx);
+  if (el.dataset.map) trekMapTo(pg, '[data-maprival]', +el.dataset.map, secs, 0);
+  trekDone(pg, pz, m, secs * 1000 + 300);
+}
+
+// ---------------- drag: the rider onto the seat ----------------
+/** @type {null | { pg: Element, pz: HTMLElement, m: number, mv: any, el: SVGGElement, from: DOMPoint }} */
+let trekHeld = null;
+function trekGrab(e, pg, pz, m, mv, el) {
+  if (el.classList.contains('gone')) return;
+  el.classList.remove('back');
+  el.classList.add('held');
+  trekHeld = { pg, pz, m, mv, el, from: scenePoint(trekSc(pg), e) };
+}
+document.addEventListener('pointermove', (e) => {
+  if (!trekHeld) return;
+  const p = scenePoint(trekSc(trekHeld.pg), e);
+  trekHeld.el.style.transform = `translate(${p.x - trekHeld.from.x}px, ${p.y - trekHeld.from.y}px)`;
+});
+const trekLetGo = (/** @type {PointerEvent} */ e) => {
+  if (!trekHeld) return;
+  const { pg, pz, m, mv, el } = trekHeld;
+  trekHeld = null;
+  el.classList.remove('held');
+  pz.dataset.last = String(trekNow());
+  // on the screen, wherever the seat has been carried to: is the rider's middle on the seat (or near enough)?
+  const s = trekOne(pg, 'trek-seat', m), ring = s && s.querySelector('.ghost'), body = el.firstElementChild;
+  if (e.type === 'pointerup' && ring && trekCur(pz, m)) {
+    const a = ring.getBoundingClientRect(), b = body.getBoundingClientRect();
+    const dx = (b.left + b.width / 2 - (a.left + a.width / 2)) / (a.width / 2 + b.width * 0.35);
+    const dy = (b.top + b.height / 2 - (a.top + a.height / 2)) / (a.height / 2 + b.height * 0.35);
+    if (dx * dx + dy * dy <= 1) {
+      el.classList.add('gone');
+      s.classList.add('filled');
+      trekSfx(mv.sfx);
+      return trekDone(pg, pz, m, 500);
+    }
+  }
+  el.classList.add('back');   // slides back home
+  el.style.transform = '';
+  if (trekCur(pz, m) && mv.miss) { stop(); trekSay(pz, mv.miss); }
+};
+document.addEventListener('pointerup', trekLetGo);
+document.addEventListener('pointercancel', trekLetGo);
+
+// ---------------- flags: their footprints light up ----------------
+// the first flag (a): its footprints light one by one, each counted aloud (count[i]), then say.a; the second (b): its
+// footprints light quickly with a ding each, then say.b. The second tapped first: both stretches light quickly, then say.ab.
+async function trekFlag(pg, pz, m, mv, el) {
+  const key = el.dataset.key, has = (k) => pz.dataset['flag' + k] === '1';
+  if (has(key)) return;
+  if (pz.dataset.busy) { if (!pz.dataset.want) pz.dataset.want = key; return; }   // the other flag, tapped while this one counts: it follows
+  pz.dataset.busy = '1';
+  pz.dataset.acted = '1';
+  const prints = [...trekSc(pg).querySelectorAll(`.trek-count[data-m="${m}"]`)].sort((x, y) => +x.dataset.i - +y.dataset.i);
+  const n = mv.count.length, A = prints.slice(0, n), B = prints.slice(n);
+  const alive = () => trekCur(pz, m);
+  const flag = (k) => trekSc(pg).querySelectorAll(`.trek-flag[data-m="${m}"][data-key="${k}"]`).forEach((f) => f.classList.add('did'));
+  const quick = async (list) => {
+    for (const p of list) {
+      if (!alive()) return;
+      p.classList.add('on');
+      trekSfx(mv.sfx, 0.45);
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  };
+  const lit = (k) => { pz.dataset['flag' + k] = '1'; trekGo(pg, `[data-ev="${m}:${k}"]`); };
+  flag(key);
+  stop();
+  let said = mv.say.b;
+  if (key === 'a') {
+    for (let i = 0; i < A.length; i++) {
+      if (!alive()) return;
+      A[i].classList.add('on');
+      await Promise.all([trekSay(pz, mv.count[i], alive), new Promise((r) => setTimeout(r, 350))]);
+    }
+    said = mv.say.a;
+  } else if (!has('a')) {   // the second flag first: the first stretch lights up too, then both are told together
+    flag('a');
+    await quick(A);
+    if (alive()) lit('a');
+    said = mv.say.ab;
+  }
+  if (key === 'b') await quick(B);
+  if (!alive()) return;
+  lit(key);
+  delete pz.dataset.busy;
+  pz.dataset.last = String(trekNow());
+  // (the last flag's lines are said after the move is done: trekCur is false by then, so they only need the page)
+  (said || []).forEach((t) => trekSay(pz, t, () => pz.isConnected && pz.closest('.pg') === pages[cur] && +pz.dataset.m === m));
+  if (has('a') && has('b')) return trekDone(pg, pz, m, 300);
+  const want = pz.dataset.want;
+  if (want && !has(want)) trekQueue.get(pz).then(() => {
+    const f = trekCur(pz, m) && !pz.dataset.busy && !has(want) && trekSc(pg).querySelector(`.trek-flag[data-m="${m}"][data-key="${want}"]`);
+    delete pz.dataset.want;
+    if (f) trekFlag(pg, pz, m, mv, /** @type {SVGGElement} */ (f));
+  });
+}
+
+// ---------------- cards: an "if" film each ----------------
+function trekCard(pg, pz, m, mv, el) {
+  if (el.classList.contains('open')) return;
+  trekSc(pg).querySelectorAll(`.trek-card.open[data-m="${m}"]`).forEach((c) => trekShut(c));
+  const key = el.dataset.key, token = `${key}${trekNow()}`;
+  pz.dataset.card = token;
+  pz.dataset.acted = '1';
+  el.parentNode.appendChild(el);   // on top of the other cards
+  el.querySelectorAll('.play').forEach((p) => { p.classList.add('q'); p.classList.remove('go'); });
+  el.getBoundingClientRect();
+  el.querySelectorAll('.play').forEach((p) => p.classList.remove('q'));
+  el.classList.add('open');
+  el.getBoundingClientRect();
+  el.querySelectorAll('.play').forEach((p) => p.classList.add('go'));
+  trekGo(pg, `[data-ev="${m}:${key}"]`);
+  stop();
+  const still = () => trekCur(pz, m) && pz.dataset.card === token;
+  const ic = mv.ifChoice && mv.ifChoice[key];
+  const lines = [...(ic && document.documentElement.dataset['choice' + ic.page] === ic.choice ? [ic.say] : []), ...((mv.say && mv.say[key]) || [])];
+  lines.forEach((t) => trekSay(pz, t, still));
+  trekQueue.get(pz).then(() => {
+    if (!still()) return;
+    el.classList.add('seen');
+    delete pz.dataset.card;
+    pz.dataset.last = String(trekNow());
+    setTimeout(() => { if (trekCur(pz, m) && !pz.dataset.card) trekShut(el); }, 700);
+    if (!trekSc(pg).querySelector(`.trek-card[data-m="${m}"]:not(.seen)`)) setTimeout(() => trekCur(pz, m) && trekDone(pg, pz, m, 300), 1200);
+  });
+}
+function trekShut(el) {
+  el.classList.remove('open');
+  el.classList.add('shutting');   // on its way back it is not touched: a finger meant for the card under it must reach that one
+  setTimeout(() => el.classList.remove('shutting'), 600);
+}
+
+// ---------------- touches ----------------
+// the part of the move being done that a finger touched (one may sit inside another: a rider on a runner's back)
+/** @param {Element} t  @returns {[SVGGElement | null, SVGGElement | null]} [the part of move m, the innermost part touched] */
+function trekHit(t, m) {
+  const first = /** @type {SVGGElement} */ (t.closest('.trek.grab'));
+  for (let x = first; x; x = /** @type {SVGGElement} */ (x.parentElement && x.parentElement.closest('.trek.grab'))) {
+    if (+x.dataset.m === m && !x.classList.contains('was')) return [x, first];
+  }
+  return [null, first];
+}
+// a part of a move still to come wobbles
+const trekNope = (/** @type {Element} */ g) => { if (g && !g.classList.contains('was')) trekReplay(g, 'nope'); };
+// a touch on a part of the first move before the voice has asked for it starts the work (and counts)
+document.addEventListener('pointerdown', (e) => {
+  const pg = pages[cur], pz = pg && P(pg), t = /** @type {Element} */ (e.target);
+  if (!pz || pz.dataset.type !== 'trek' || pz.dataset.started || pg.classList.contains('solved') || !pg.contains(t)) return;
+  if (!trekHit(t, 0)[0]) return;
+  stop();
+  const list = beats(pg), first = list.findIndex((b) => b.classList.contains('after')), upto = first < 0 ? list.length : first;
+  pg.querySelectorAll('svg.scene [data-at]').forEach((x) => { if (+x.dataset.at < upto && !x.classList.contains('go')) x.classList.add('go', 'q'); });
+  startPuzzle(pg);
+}, true);
+document.addEventListener('pointerdown', (e) => {
+  const pg = pages[cur], pz = /** @type {HTMLElement} */ (pg && P(pg)), t = /** @type {Element} */ (e.target);
+  if (!pz || pz.dataset.type !== 'trek' || !pg.contains(t) || !t.closest('.trek.grab')) return;
+  e.preventDefault();
+  const m = +pz.dataset.m, [el, touched] = trekHit(t, m);
+  if (!pg.classList.contains('asking') || pg.classList.contains('solved') || pz.dataset.over || !el) return trekNope(touched);
+  const mv = trekMoves(pz)[m];
+  pz.dataset.last = String(trekNow());
+  if (el.matches('.trek-walker, .trek-btn, .trek-leaf')) return mv.kind === 'step' || mv.kind === 'race' ? trekTap(pg, pz, m, mv) : undefined;
+  if (el.matches('.trek-runner')) return trekRun(pg, pz, m, mv, el);
+  if (el.matches('.trek-tapone')) return trekTapOne(pg, pz, m, mv, el);
+  if (el.matches('.trek-rider')) return trekGrab(e, pg, pz, m, mv, el);
+  if (el.matches('.trek-flag')) return trekFlag(pg, pz, m, mv, el);
+  if (el.matches('.trek-card')) return trekCard(pg, pz, m, mv, el);
+});
+// the clicks that follow those touches are the trek's (a tap on the picture must not read a sentence); the line under the
+// work says what to do
+PUZZLE_TAP.trek = (pg, t) => {
+  const how = /** @type {HTMLElement} */ (t.closest('.trek-how'));
+  if (how) { speakThen(how.dataset.say); return true; }
+  return !!t.closest('.trek.grab');
+};
+// heard again from the start while racing: the race waits for the child's first tap again
+document.addEventListener('click', (e) => {
+  const pg = e.target.closest('.pg'), pz = /** @type {HTMLElement} */ (pg && P(pg));
+  if (!pz || pz.dataset.type !== 'trek' || !e.target.closest('.again') || pg.classList.contains('solved') || !pz.dataset.started) return;
+  const m = +pz.dataset.m, mv = trekMoves(pz)[m];
+  if (mv && mv.kind === 'race' && pz.dataset.race === 'run' && trekCur(pz, m)) trekRaceReset(pg, pz, m, mv);
+}, true);
+// a choice (choose: [data-choice]) is remembered for later pages, on <html data-choice4="B">
+document.addEventListener('click', (e) => {
+  const c = e.target.closest('[data-choice]'), pg = c && c.closest('.pg');
+  if (!c || !(pg.classList.contains('asking') || pg.classList.contains('solved'))) return;
+  document.documentElement.dataset['choice' + pg.dataset.pg] = c.dataset.choice;
+}, true);
+// the trek pages: no scrolling or zooming on their picture while the child taps and drags (trek.css)
+document.querySelectorAll('.puzzle[data-type="trek"]').forEach((pz) => pz.closest('.pg').classList.add('trek-hands'));
+
 // 故事大王 on a tablet: what the fairy tales add to the picture book's player (../shared/reader/player.js, loaded before this file):
 // sound effects that play alongside the voice, and the interactions written by tale.js —
 //   build    jobs one after another (place / smear / haul / tap); the sun moves as the work gets done
@@ -622,11 +1561,9 @@ document.addEventListener('pointerdown', (e) => {
   const type = pz.dataset.type;
   const early = type === 'build' ? t.closest('.piece, .cart, .smear, .tapme') : type === 'tapwind' ? t.closest('svg.scene') : null;
   if (!early) return;
-  stop();
   // the picture moves with the sentences: put everything the skipped lead-in would have moved in place at once (else
   // the wolf was still rubbing his bottom when the wind page opened early, with no blowing pose and no wind)
-  const list = beats(pg), first = list.findIndex((b) => b.classList.contains('after')), upto = first < 0 ? list.length : first;
-  pg.querySelectorAll('svg.scene [data-at]').forEach((x) => { if (+x.dataset.at < upto && !x.classList.contains('go')) x.classList.add('go', 'q'); });
+  skipLeadIn(pg);
   startPuzzle(pg);
 }, true);
 
