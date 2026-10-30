@@ -1,23 +1,29 @@
-/* 诗词世界: one poem over four short days, on a tablet */
-:root { --ink: #3a1f0f; --red: #c0392b; --paper: #fdf8ef; --card: #ffffff; --line: #eadfcd; --gold: #ffd23f; --soft: #8a7d6d; }
+/* What the tap-to-hear pages of 文字王国 and 诗词世界 share; load it before week.css / poem.css, which set the colours
+   (--ink, --card, --line) and the fonts: a column of section cards, each with a numbered heading. */
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--paper); color: #2b2118; font-family: "PingFang SC", sans-serif; }
 main { max-width: 860px; margin: 0 auto; padding: 16px 16px 60px; }
 svg { display: block; width: 100%; height: auto; }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: center; }
+
+.top { display: flex; align-items: center; gap: 16px; padding: 8px 4px 4px; }
+.top > div { flex: 1; }
+
+.sec { background: var(--card); border: 3px solid var(--line); border-radius: 24px; padding: 16px 18px 20px; margin-top: 18px; }
+.sec h2 { margin: 0; display: flex; align-items: baseline; gap: 10px; }
+.sec h2 .n { align-self: center; width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 18px; display: inline-flex; align-items: center; justify-content: center; }
+
+/* 诗词世界: one poem over four short days, on a tablet (after ../shared/page.css) */
+:root { --ink: #3a1f0f; --red: #c0392b; --paper: #fdf8ef; --card: #ffffff; --line: #eadfcd; --gold: #ffd23f; --soft: #8a7d6d; }
+body { margin: 0; background: var(--paper); color: #2b2118; font-family: "PingFang SC", sans-serif; }
 .kai { font-family: "Kaiti SC", "STKaiti", "KaiTi", serif; }
 
 .note { font-size: 13px; color: #8a8f99; margin: 4px 0 12px; line-height: 1.6; }
-.top { display: flex; align-items: center; gap: 16px; padding: 8px 4px 4px; }
-.top > div { flex: 1; }
 .top svg { width: 240px; flex: none; border-radius: 16px; overflow: hidden; }
 .tag { display: inline-block; background: var(--ink); color: #fff; border-radius: 20px; padding: 2px 14px; font-size: 15px; }
 h1 { margin: 8px 0 2px; font-size: 40px; font-weight: 400; color: var(--red); }
 h1 small { display: block; font-size: 18px; color: var(--soft); margin-top: 4px; }
 
-.sec { background: var(--card); border: 3px solid var(--line); border-radius: 24px; padding: 16px 18px 20px; margin-top: 18px; }
-.sec h2 { margin: 0; font-size: 26px; display: flex; align-items: baseline; gap: 10px; }
-.sec h2 .n { align-self: center; width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 18px; display: inline-flex; align-items: center; justify-content: center; }
+.sec h2 { font-size: 26px; }
 .sec h2 small { font-size: 16px; color: var(--soft); font-weight: 400; }
 
 [data-say], [data-file], .play-line, .play-poem, .play-song { cursor: pointer; -webkit-tap-highlight-color: transparent; }

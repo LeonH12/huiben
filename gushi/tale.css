@@ -35,6 +35,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .btn { display: inline-block; background: var(--gold); border: 3px solid var(--ink); border-radius: 999px; padding: 6px 20px; font-size: 19px; box-shadow: 0 3px 0 var(--ink); }
 .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
 .btn.big { font-size: 24px; padding: 10px 30px; }
+.btn.tohome { background: #fff; color: inherit; text-decoration: none; }
 .btn.small { font-size: 16px; padding: 3px 14px; background: #fff; }
 .btn.is-playing { background: #ffb3a7; }
 .btn.again.is-playing::before { content: "🔊 "; }
@@ -182,9 +183,9 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .bin.over .bin-bg { fill: #fff3b0; }
 .hinting .drag:not(.placed) .lift { transform-box: fill-box; transform-origin: 50% 50%; animation: wiggle .5s ease-in-out 3; }
 [data-choice].found > .card { stroke: var(--red); stroke-width: 7; }
-/* pouring: a meter's cells light up as things are poured in */
-[data-fuel] .lit { opacity: 0; transition: opacity .35s; }
-[data-fuel].on .lit { opacity: 1; }
+/* a little wing flapping about its root (bottom right of the wing) */
+.lp-flap { transform-box: fill-box; transform-origin: 100% 100%; animation: flap .42s ease-in-out infinite alternate; }
+@keyframes flap { from { transform: rotate(-12deg); } to { transform: rotate(14deg); } }
 
 @keyframes breathe { 50% { transform: scale(1.012, .99); } }
 @keyframes blink { 0%, 94%, 100% { transform: none; } 96% { transform: scaleY(.1); } }
@@ -219,7 +220,30 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   .scene *, .pg { animation-duration: .01s !important; animation-iteration-count: 1 !important; transition-duration: .01s !important; }
 }
 
-/* 故事大王: what the fairy tales add to 逻辑世界's page look (../逻辑世界/story.css, loaded first):
+/* puzzle 'beads': a moved bead slides over by its own --dx */
+.scene [data-bead] { transition: transform .3s ease-out; }
+.scene [data-bead].moved { transform: translateX(var(--dx)); }
+
+/* puzzle 'bundle': a tapped stick shows its number (.mark), the ten tied fly into the bundle and its rope shows */
+[data-stick] { transition: transform .8s cubic-bezier(.4, 1.25, .6, 1); }
+[data-stick] .mark { opacity: 0; transition: opacity .2s; }
+[data-stick].picked .mark { opacity: 1; }
+[data-stick].tied .mark { opacity: 0; }
+[data-bundle] .rope { opacity: 0; transition: opacity .3s .7s; }
+[data-bundle].tied .rope { opacity: 1; }
+.hinting .tap[data-stick]:not(.picked) .stk { transform-box: fill-box; transform-origin: 50% 50%; animation: wiggle .5s ease-in-out 3; }
+
+/* puzzle 'pier': a placed board can be tapped off; a full pier turns green, a dead end red; a wrong board is thrown back */
+.scene .planks .drag.placed, .scene .planks .drag.placed * { pointer-events: auto; cursor: pointer; }
+.bin.done .bin-bg { fill: #d8f3cf; }
+.bin.stuck .bin-bg { fill: #ffd2cc; }
+.drag.flung .lift { transform-box: fill-box; transform-origin: 50% 50%; animation: wobble .45s 2; }
+
+/* puzzle 'pour': a meter's cells light up as things are poured in */
+[data-fuel] .lit { opacity: 0; transition: opacity .35s; }
+[data-fuel].on .lit { opacity: 1; }
+
+/* 故事大王: what the fairy tales add to the picture book's look (../shared/reader/story.css, loaded first):
    the interactions of tale.js / play.js — build, tapwind, told */
 
 /* ---- build ---- */

@@ -3,12 +3,13 @@
 // Recordings: audio/voice.js says which text plays which file (VOICE_FILES). A page's sentences may instead be read
 // in one continuous take (VOICE_TAKES: "page|sentence" → [file, start, end] seconds), so the voice flows like a told story;
 // the sentence being read lights up and moves the picture as the take reaches it.
-// The playing itself (one sound at a time, the iPad fixes, takes) is ../shared/audio.js, loaded before this file.
+// The playing itself (one sound at a time, the iPad fixes, takes) is ../audio.js, loaded before this file. The puzzle
+// types in files of their own (puzzles/<type>.play.js) are loaded after it; the published player.js has them joined on.
 //
 // Everything it needs is in the page itself (the published pages have no drawing code):
 //   .pg                    a page; .beat[data-b][data-say] its sentences, .beat.after the ones read after the puzzle
 //   [data-at=k]            a piece of the picture that moves (gets .go) when beat k is read; story.css says how
-//   .puzzle[data-type]     find | fill | seq | sort | choose | path | color | mirror, with the picture's [data-find] [data-decoy] [data-slot]
+//   .puzzle[data-type]     find | fill | seq | sort | choose | path | color | mirror (more: puzzles/), with the picture's [data-find] [data-decoy] [data-slot]
 //                          [data-choice] [data-stone] [data-seg] [data-step] [data-walker] [data-paint] [data-cell] .drag .bin;
 //                          .ask = a question with .chip answers
 
@@ -102,9 +103,19 @@ function finished(pg) {
 
 // ---------------- puzzles ----------------
 const P = (pg) => pg.querySelector('.puzzle');
-// puzzle types a series adds for itself (故事大王/play.js: build, tapwind, told): type → start(page, puzzle), called once
+// puzzle types in files of their own (puzzles/<type>.play.js) and a series' own (故事大王/play.js: build, tapwind, told):
+// type → start(page, puzzle), called once
 /** @type {Record<string, (pg: Element, pz: Element) => void>} */
 const PUZZLE_PLAY = {};
+// …and what such a type does with a tap on its page (fn(page, tapped element) → true when it took the tap) and with a
+// thing dragged onto a bin (fn(page, thing, bin or null); without one a drop is sorting's)
+/** @type {Record<string, (pg: Element, t: Element) => boolean | void>} */
+const PUZZLE_TAP = {};
+/** @type {Record<string, (pg: Element, d: HTMLElement, b: Element | null) => void>} */
+const PUZZLE_DROP = {};
+// a tap on a picture's .tap counts while the puzzle is asked, or after it is solved
+/** @param {Element} pg */
+const canTap = (pg) => pg.classList.contains('asking') || pg.classList.contains('solved');
 async function speakThen(text, fn) { stop(); if (await say(text)) fn && fn(); }
 
 function startPuzzle(pg) {
@@ -156,7 +167,7 @@ function onChip(pg, chip) {
     speakThen('对啦！', () => openAsk(pg));
   } else {
     chip.classList.remove('no'); chip.getBoundingClientRect(); chip.classList.add('no');
-    speakThen('再数一数。');
+    speakThen(chip.dataset.no || '再数一数。');
   }
 }
 
@@ -241,7 +252,7 @@ function binAt(pg, p) {
   return [...pg.querySelectorAll('.bin')].find((b) => { const [x, y, w, h] = b.dataset.box.split(',').map(Number); return p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + h; });
 }
 function onSortDrop(pg, d, b) {
-  if (P(pg).dataset.type === 'pour') return onPour(pg, d, b);
+  if (PUZZLE_DROP[P(pg).dataset.type]) return PUZZLE_DROP[P(pg).dataset.type](pg, d, b);
   const pz = P(pg), want = d.dataset.drag;
   if (!b) { d.style.transform = ''; return; }
   const got = b.dataset.bin;
@@ -258,18 +269,6 @@ function onSortDrop(pg, d, b) {
   d.dataset.in = got;
   if (!pg.querySelector('.drag:not(.placed)')) speakThen(pz.dataset.done, () => solved(pg));
   else { stop(); say('对啦！'); }
-}
-// pouring (puzzle 'pour', dragged like sorting): a thing dropped on the .bin settles in its next slot and lights the next
-// data-each [data-fuel] cells; every cell lit = solved. Dropped anywhere else it goes back home.
-function onPour(pg, d, b) {
-  const pz = P(pg);
-  if (!b) { d.style.transform = ''; return; }
-  const n = pg.querySelectorAll('.drag.placed').length, [sx, sy] = b.dataset.slots.split(' ')[n].split(',').map(Number);
-  d.style.transform = `translate(${sx - +d.dataset.x}px, ${sy - +d.dataset.y}px)`;
-  d.classList.add('placed');
-  [...pg.querySelectorAll('[data-fuel]:not(.on)')].slice(0, +pz.dataset.each).forEach((c) => c.classList.add('on'));
-  if (!pg.querySelector('[data-fuel]:not(.on)')) speakThen(pz.dataset.done, () => solved(pg));
-  else { stop(); say(pz.dataset.lines.split('|')[n] || '对啦！'); }
 }
 // a tapped thing with data-pick (a route card …) names itself on its scene (svg.scene[data-pick]), so the picture can
 // act it out with CSS; set again on every tap, so the acting starts over
@@ -318,10 +317,17 @@ function onCell(pg, t) {
   const r = t.querySelector('.paint');
   r.setAttribute('fill', color);
   r.removeAttribute('stroke-dasharray');
-  if ('blank' in t.dataset) r.setAttribute('stroke', 'none');   // "no block here": it melts into the door
   t.classList.add('found');
   if (!pg.querySelector('[data-cell]:not(.found)')) speakThen(pz.dataset.done, () => solved(pg));
   else { stop(); say('对啦！'); }
+}
+
+
+// a puzzle's sound effect (data-sfx), then the line
+function sfxThen(pg, line) {
+  stop();
+  const f = P(pg).dataset.sfx;
+  (f ? say(null, f) : Promise.resolve(true)).then((ok) => ok && line && say(line));
 }
 
 // ---------------- turning pages ----------------
@@ -367,6 +373,8 @@ document.addEventListener('click', (e) => {
   if (!pg) return;
   // always from the first sentence; a solved puzzle starts over (one half done keeps its progress)
   if (hit('.again')) { if (pg.classList.contains('solved')) fresh(pg); return narrate(pg); }
+  const own = P(pg) && PUZZLE_TAP[P(pg).dataset.type];
+  if (own && own(pg, t)) return;
   if (hit('.chip')) return onChip(pg, hit('.chip'));
   if (hit('.add')) return onFill(pg, true);
   if (hit('.hint')) {
@@ -428,7 +436,136 @@ document.querySelectorAll('.rig, .rig-head, .rig-eyes, .didi-eyes').forEach((/**
 /** @type {HTMLButtonElement} */ (document.querySelector('.pager .prev')).disabled = true;
 blank = pages.map((pg) => pg.cloneNode(true));   // after the breathing delays above, so the copies keep them
 
-// 故事大王 on a tablet: what the fairy tales add to 逻辑世界's player (../逻辑世界/player.js, loaded before this file):
+// Playing puzzle 'beads' (written by beads.js), loaded after player.js: the beads are a tool, so the questions start at
+// once. Tapping a bead slides it and every bead before it over (.moved); tapping a moved one slides it and every one
+// after it back. The moved beads are always 1 … m: ten red, then white
+function onBead(pg, t) {
+  const i = +t.dataset.bead, back = t.classList.contains('moved');
+  pg.querySelectorAll('[data-bead]').forEach((x) => { const k = +x.dataset.bead; if (back ? k >= i : k <= i) x.classList.toggle('moved', !back); });
+  sfxThen(pg, '');
+}
+function beadsBack(pg) {
+  pg.querySelectorAll('[data-bead].moved').forEach((x) => x.classList.remove('moved'));
+  stop();
+}
+PUZZLE_PLAY.beads = (pg) => openAsk(pg);
+PUZZLE_TAP.beads = (pg, t) => {
+  if (t.closest('.beadsback')) { beadsBack(pg); return true; }
+  const b = t.closest('.tap[data-bead]');
+  if (!b || !canTap(pg)) return false;
+  onBead(pg, b);
+  return true;
+};
+
+// Playing puzzle 'bundle' (written by bundle.js), loaded after player.js: a tapped stick shows its number; the tenth
+// ties the ten into the bundle (each flies to its place in [data-bundle]'s data-slots "x,y,angle …"), then the questions
+function onStick(pg, t) {
+  const bundle = pg.querySelector('[data-bundle]');
+  if (bundle.classList.contains('tied') || t.classList.contains('picked')) return;
+  const n = pg.querySelectorAll('[data-stick].picked').length + 1;
+  t.classList.add('picked');
+  t.dataset.n = String(n);
+  t.querySelector('.cnt').textContent = String(n);
+  stop();
+  if (n < 10) return;
+  const spots = bundle.dataset.slots.split(' ').map((s) => s.split(',').map(Number));
+  pg.querySelectorAll('[data-stick].picked').forEach((/** @type {SVGElement} */ s) => {
+    const [x, y, a] = spots[+s.dataset.n - 1];
+    s.style.transform = `translate(${x - +s.dataset.x}px, ${y - +s.dataset.y}px) rotate(${a - +s.dataset.a}deg)`;
+    s.classList.add('tied');
+  });
+  bundle.classList.add('tied');
+  speakThen(P(pg).dataset.done, () => openAsk(pg));
+}
+PUZZLE_TAP.bundle = (pg, t) => {
+  const stk = t.closest('.tap[data-stick]');
+  if (!stk || !canTap(pg)) return false;
+  onStick(pg, stk);
+  return true;
+};
+
+// Playing puzzle 'pier' (written by pier.js), loaded after player.js: a board dropped on a pier sits in its next free place; the second one must make the pier's number with the
+// first, or the bridge creaks and throws it back. A right pair that leaves another pier with no boards that fit is a
+// dead end (the pier turns red, the boards stay until taken off: tap one, or 全部拿下来); after three, the big hint.
+// The lines are in the puzzle's hidden spans, by data-k (see PierPuzzle in shared/types.d.ts).
+const pierLine = (pg, k) => { const e = P(pg).querySelector(`[data-k="${k}"]`); return e ? e.dataset.say : ''; };
+const onPier = (pg, b) => [...pg.querySelectorAll(`.drag.placed[data-in="${b.dataset.bin}"]`)];
+// can the piers not in fixed still each get two boards, from the boards not on the fixed ones?
+function pierFit(pg, fixed) {
+  const used = new Set(fixed.flatMap((b) => onPier(pg, b)));
+  const free = [...pg.querySelectorAll('.drag')].filter((d) => !used.has(d)).map((d) => +d.dataset.drag);
+  const want = [...pg.querySelectorAll('.bin')].filter((b) => !fixed.includes(b)).map((b) => +b.dataset.bin);
+  /** @param {number[]} ws  @param {number[]} vs  @returns {boolean} */
+  const fit = (ws, vs) => !ws.length || vs.some((v, i) => vs.some((u, j) => j > i && u + v === ws[0] && fit(ws.slice(1), vs.filter((_, k) => k !== i && k !== j))));
+  return fit(want, free);
+}
+function takeOff(pg, d) {
+  const b = pg.querySelector(`.bin[data-bin="${d.dataset.in}"]`);
+  d.classList.remove('placed');
+  delete d.dataset.in; delete d.dataset.slot;
+  d.style.transform = '';
+  if (b) b.classList.remove('done', 'stuck');
+}
+PUZZLE_DROP.pier = (pg, d, b) => {
+  const pz = P(pg);
+  if (!b) { d.style.transform = ''; return; }
+  const on = onPier(pg, b), want = +b.dataset.bin;
+  if (on.length > 1) { d.style.transform = ''; return speakThen(pierLine(pg, 'full')); }
+  const taken = on.map((x) => x.dataset.slot), slots = b.dataset.slots.split(' ');
+  const k = slots.findIndex((_, i) => !taken.includes(String(i)));
+  const [sx, sy] = slots[k].split(',').map(Number);
+  d.style.transform = `translate(${sx - +d.dataset.x}px, ${sy - +d.dataset.y}px)`;
+  d.classList.add('placed');
+  d.dataset.in = b.dataset.bin; d.dataset.slot = String(k); d.dataset.dropped = String(Date.now());
+  if (!on.length) return stop();
+  const sum = +on[0].dataset.drag + +d.dataset.drag;
+  if (sum !== want) {   // 嘎吱: the board is thrown back
+    setTimeout(() => { if (d.dataset.in === b.dataset.bin) { takeOff(pg, d); d.classList.remove('flung'); d.getBoundingClientRect(); d.classList.add('flung'); } }, 450);
+    return sfxThen(pg, pierLine(pg, `${sum > want ? 'more' : 'less'}-${want}`));
+  }
+  b.classList.add('done');
+  const bins = [...pg.querySelectorAll('.bin')];
+  if (bins.every((x) => onPier(pg, x).length === 2)) return speakThen(pz.dataset.done, () => solved(pg));
+  if (pierFit(pg, [b])) { stop(); say('对啦！'); return; }
+  b.classList.add('stuck');
+  const tries = +(pz.dataset.tries || 0) + 1, [lo, hi] = [+on[0].dataset.drag, +d.dataset.drag].sort((x, y) => x - y);
+  pz.dataset.tries = String(tries);
+  speakThen(pierLine(pg, `stuck-${want}-${lo}-${hi}`) || pierLine(pg, 'stuck'), () => tries >= 3 && say(pierLine(pg, 'hint3')));
+};
+// a placed board tapped comes off (not the tap that ends the drag which put it there)
+function offPier(pg, d) {
+  if (pg.classList.contains('solved') || Date.now() - +(d.dataset.dropped || 0) < 400) return;
+  takeOff(pg, d);
+  stop();
+}
+function allOff(pg) {
+  if (pg.classList.contains('solved')) return;
+  pg.querySelectorAll('.drag.placed').forEach((d) => takeOff(pg, d));
+  stop();
+}
+// 全部拿下来, and a placed board tapped
+PUZZLE_TAP.pier = (pg, t) => {
+  if (t.closest('.alloff')) { allOff(pg); return true; }
+  const d = t.closest('.planks .drag.placed');
+  if (d) { offPier(pg, d); return true; }
+  return false;
+};
+
+// Playing puzzle 'pour' (written by pour.js), loaded after player.js. Dragged like sorting: a thing dropped on the .bin
+// settles in its next slot and lights the next data-each [data-fuel] cells; every cell lit = solved. Dropped anywhere
+// else it goes back home.
+PUZZLE_DROP.pour = (pg, d, b) => {
+  const pz = P(pg);
+  if (!b) { d.style.transform = ''; return; }
+  const n = pg.querySelectorAll('.drag.placed').length, [sx, sy] = b.dataset.slots.split(' ')[n].split(',').map(Number);
+  d.style.transform = `translate(${sx - +d.dataset.x}px, ${sy - +d.dataset.y}px)`;
+  d.classList.add('placed');
+  [...pg.querySelectorAll('[data-fuel]:not(.on)')].slice(0, +pz.dataset.each).forEach((c) => c.classList.add('on'));
+  if (!pg.querySelector('[data-fuel]:not(.on)')) speakThen(pz.dataset.done, () => solved(pg));
+  else { stop(); say(pz.dataset.lines.split('|')[n] || '对啦！'); }
+};
+
+// 故事大王 on a tablet: what the fairy tales add to the picture book's player (../shared/reader/player.js, loaded before this file):
 // sound effects that play alongside the voice, and the interactions written by tale.js —
 //   build    jobs one after another (place / smear / haul / tap); the sun moves as the work gets done
 //   tapwind  tap anywhere, fast: a wind meter (0–100, +12 a tap, 60 % of it leaking away every second) blows a house
