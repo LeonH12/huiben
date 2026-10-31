@@ -266,6 +266,17 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .pz-to .lit-show, .pz-to .lit-hide { transition: opacity .6s; }
 .pz-to:not(.lit) .lit-show, .pz-to.lit .lit-hide { opacity: 0; }
 
+/* a place's close-up (o.show): hidden; .open pops it up from the place's middle over everything (it is the scene's last
+   child then), .closing shrinks it back; a solved page shows none, so nothing covers the prince */
+.pz-show { display: none; }
+.pz-show.open { display: inline; animation: pz-show-in .5s cubic-bezier(.3, 1.4, .5, 1) both; }
+.pz-show.open.closing { animation: pz-show-out .3s ease-in both; }
+.scene .pz-show.open, .scene .pz-show.open * { pointer-events: auto; cursor: pointer; touch-action: none; }
+.scene .pz-show.open.closing, .scene .pz-show.open.closing * { pointer-events: none; }
+.pg.solved .pz-show { display: none; }
+@keyframes pz-show-in { from { transform: scale(.06); opacity: 0; } 35% { opacity: 1; } to { transform: none; opacity: 1; } }
+@keyframes pz-show-out { from { transform: none; opacity: 1; } to { transform: scale(.06); opacity: 0; } }
+
 /* puzzle 'hold' (puzzles/hold.js): the ring round the thing fills while it is held (hold.play.js sets its dashoffset);
    only the step being done shows its ring, and it breathes until a finger is on it. svg.scene has .pz-holding while a
    finger holds, .pz-mid from half full on, .pz-held once full: anywhere in the picture (inside the holdSpot or not, e.g.

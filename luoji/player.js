@@ -604,6 +604,7 @@ function pzGive(pg, el, to, spec) {
   pzMark(sc, 'data-given', el.getAttribute('data-give'));
   if (to.querySelector('.pz-bubble')) pzReplay(to, 'pz-bub');
   pzSfx(pg, to.getAttribute('data-sfx'));
+  if (to.hasAttribute('data-closeup')) { pzCloseup(pg, to); pzCheck(pg); return; }
   let line = pzLines(to)[0];
   if (!line && spec.lines) {
     const n = +(pz.getAttribute('data-said') || 0);
@@ -613,6 +614,48 @@ function pzGive(pg, el, to, spec) {
   pzSay(pg, line);
   pzCheck(pg);
 }
+
+// ---------------- a place's close-up (giveTarget o.show) ----------------
+// opened when the place gets its treasure and when a lit place is tapped: it pops up from the place's middle over the
+// picture (moved to the end of the scene, so it is on top), the place's line is said, and it closes again once the line is
+// done (at least 2.2 s). Tapped, it closes at once. Closed for good when the puzzle is solved (give.css).
+/** @param {Element} sc */
+function pzCloseupShut(sc) {
+  sc.querySelectorAll('.pz-show.open:not(.closing)').forEach((g) => {
+    g.classList.add('closing');
+    g.setAttribute('data-tok', String(+(g.getAttribute('data-tok') || 0) + 1));
+    setTimeout(() => { if (g.classList.contains('closing')) g.classList.remove('open', 'closing'); }, 320);
+  });
+}
+/** @param {Element} pg  @param {Element} to */
+function pzCloseup(pg, to) {
+  const sc = pzScene(pg), g = sc.querySelector(`.pz-show[data-for="${to.getAttribute('data-to')}"]`);
+  if (!g) return;
+  pzCloseupShut(sc);
+  sc.appendChild(g);
+  g.classList.remove('closing');
+  pzReplay(g, 'open');
+  const tok = String(+(g.getAttribute('data-tok') || 0) + 1), opened = performance.now();
+  g.setAttribute('data-tok', tok);
+  pzSay(pg, pzLines(to)[0]).then(() => setTimeout(() => {
+    if (g.getAttribute('data-tok') === tok && g.isConnected) pzCloseupShut(sc);
+  }, Math.max(250, 2200 - (performance.now() - opened))));
+}
+document.addEventListener('pointerdown', (e) => {
+  const sc = /** @type {Element} */ (e.target).closest && /** @type {Element} */ (e.target).closest('svg.scene'), pg = sc && sc.closest('.pg');
+  if (!sc || !pg || !sc.querySelector('.pz-show')) return;
+  if (/** @type {Element} */ (e.target).closest('.pz-show.open')) { pzCloseupShut(sc); return; }
+  // a leaf still to give is picked up (give's own handler); one already given lies on its place: that is a tap on the place
+  if (/** @type {Element} */ (e.target).closest('.pz-give:not(.given)')) { pzCloseupShut(sc); return; }
+  pzCloseupShut(sc);
+  const to = [...sc.querySelectorAll('.pz-to.lit[data-closeup]')].find((t) => {
+    const [x, y, w, h] = t.getAttribute('data-box').split(',').map(Number), p = pzLocal(t, e);
+    return p.x > x && p.x < x + w && p.y > y && p.y < y + h;
+  });
+  if (!to || !pzLive(to)) return;
+  pzTouched(pg);
+  pzCloseup(pg, to);
+});
 
 // Playing the things to hold down (holdSpot, hold.js) of a 'hold' puzzle or a hold step, loaded after player.js; needs
 // steps.play.js. A finger on it (one at a time):
