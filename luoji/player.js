@@ -42,8 +42,16 @@ function applyBeat(pg, b) {
 
 // ---------------- reading ----------------
 const beats = (pg) => [...pg.querySelectorAll('.beat')];
+// the sentence being read stays in sight when the words are longer than their box (the buttons stick to its bottom)
+function keepInSight(pg, el) {
+  const box = pg.querySelector('.text'), bar = box.querySelector(':scope > .bar');
+  const r = el.getBoundingClientRect(), top = box.getBoundingClientRect().top, bottom = bar.getBoundingClientRect().top;
+  if (r.bottom > bottom) box.scrollTop += r.bottom - bottom + 8;
+  else if (r.top < top) box.scrollTop -= top - r.top + 8;
+}
 function mark(pg, el) {
   beats(pg).forEach((x) => x.classList.toggle('on', x === el));
+  keepInSight(pg, el);
   applyBeat(pg, +el.dataset.b);
 }
 // the breath after a sentence read on its own: longer after a full stop or "……", short after a comma
