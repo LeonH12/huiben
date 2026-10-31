@@ -1088,6 +1088,8 @@ function trekMapTo(pg, sel, t, secs, t0) {
     el.dataset.t = t.toFixed(3);   // where it is now
   });
 }
+// the head a walker moves on the race map: his own ([data-mapme]), or the rival's ([data-maprival]) when he is the hare (walker o.rival)
+const trekMapSel = (/** @type {Element} */ w) => (/** @type {HTMLElement} */ (w).dataset.mapof === 'rival' ? '[data-maprival]' : '[data-mapme]');
 const trekRange = (s) => (s || '').split(',').map(Number);
 
 // ---------------- moves ----------------
@@ -1168,15 +1170,16 @@ function trekTap(pg, pz, m, mv) {
 function trekStep(pg, pz, m, mv) {
   const w = trekOne(pg, 'trek-walker', m), k = +pz.dataset.k, tries = pz.dataset.tries || '';
   const pts = w.dataset.pts.split(' ').map((p) => p.split(',').map(Number)), to = pts[Math.min(k + 1, pts.length - 1)];
+  const pace = mv.paces && mv.paces[k] != null ? mv.paces[k] : mv.pace;   // paces[k]: step k's own pace
   const quiet = mv.quietFrom != null && k >= mv.quietFrom;
-  w.style.transition = `transform ${mv.pace}s ease-in-out`;
-  w.style.setProperty('--pace', `${mv.pace}s`);
+  w.style.transition = `transform ${pace}s ease-in-out`;
+  w.style.setProperty('--pace', `${pace}s`);
   trekReplay(w, 'stepping');
   w.style.transform = `translate(${to[0] - pts[0][0]}px, ${to[1] - pts[0][1]}px)`;
   trekSc(pg).querySelectorAll(`.trek-leaf[data-m="${m}"]`).forEach((l) => l.classList.remove('ready'));
   trekSfx(quiet ? mv.quietSfx || mv.sfx : mv.sfx, quiet ? 0.5 : 0.8);
-  if (w.dataset.map) { const [a, b] = trekRange(w.dataset.map); trekMapTo(pg, '[data-mapme]', a + ((b - a) * (k + 1)) / mv.n, mv.pace, a); }
-  setTimeout(() => trekStepped(pg, pz, m, mv, tries), mv.pace * 1000);
+  if (w.dataset.map) { const [a, b] = trekRange(w.dataset.map); trekMapTo(pg, trekMapSel(w), a + ((b - a) * (k + 1)) / mv.n, pace, a); }
+  setTimeout(() => trekStepped(pg, pz, m, mv, tries), pace * 1000);
 }
 function trekStepped(pg, pz, m, mv, tries) {
   if (!trekCur(pz, m) || (pz.dataset.tries || '') !== tries || pz.dataset.race === 'lost') return;
@@ -1292,7 +1295,7 @@ function trekRaceReset(pg, pz, m, mv) {
   sc.querySelectorAll(`.trek-trail[data-m="${m}"]`).forEach((e) => e.classList.remove('on'));
   trekGo(pg, `[data-ev^="${m}:"]`, false);
   trekGo(pg, '[data-lose]', false);
-  if (w && w.dataset.map) trekMapTo(pg, '[data-mapme]', trekRange(w.dataset.map)[0], 0.4, trekRange(w.dataset.map)[0]);
+  if (w && w.dataset.map) trekMapTo(pg, trekMapSel(w), trekRange(w.dataset.map)[0], 0.4, trekRange(w.dataset.map)[0]);
   if (r && r.dataset.map) trekMapTo(pg, '[data-maprival]', trekRange(r.dataset.map)[0], 0.4, trekRange(r.dataset.map)[0]);
   trekRaceArm(pg, pz, m, mv, false);
   trekButtons(pg, pz, m, mv);
