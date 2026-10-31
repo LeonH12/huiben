@@ -28,7 +28,7 @@ function resetScene(pg) {
   sc.classList.remove('quick');
 }
 // beat b: its pieces move; pieces of earlier beats that have not moved yet are put in place at once
-// (a series may act on a beat too, fn(pg, b): 故事大王/play.js plays the sound effects of the pieces that move)
+// (a series may act on a beat too, fn(pg, b): shared/tale/play.js plays the sound effects of the pieces that move)
 /** @type {((pg: Element, b: number) => void)[]} */
 const onBeat = [];
 function applyBeat(pg, b) {
@@ -103,7 +103,7 @@ function finished(pg) {
 
 // ---------------- puzzles ----------------
 const P = (pg) => pg.querySelector('.puzzle');
-// puzzle types in files of their own (puzzles/<type>.play.js) and a series' own (故事大王/play.js: build, tapwind, told):
+// puzzle types in files of their own (puzzles/<type>.play.js) and a series' own (shared/tale/play.js: build, tapwind, told):
 // type → start(page, puzzle), called once
 /** @type {Record<string, (pg: Element, pz: Element) => void>} */
 const PUZZLE_PLAY = {};
@@ -1071,9 +1071,15 @@ const trekNow = () => performance.now();
 const trekCur = (pz, m) => pz.isConnected && pz.closest('.pg') === pages[cur] && +pz.dataset.m === m && !pz.dataset.over;
 /** @param {Element} el  @param {string} c */
 const trekReplay = (el, c) => { el.classList.remove(c); el.getBoundingClientRect(); el.classList.add(c); };
-// the pieces of the picture matching sel move (.go), or are put back (on = false)
+// the pieces of the picture matching sel move (.go), or are put back (on = false); one with data-sfx (and no data-at: a
+// beat's sound is play.js's) plays it as it moves, data-wait seconds later
 function trekGo(pg, sel, on = true) {
-  trekSc(pg).querySelectorAll(sel).forEach((e) => e.classList.toggle('go', on));
+  trekSc(pg).querySelectorAll(sel).forEach((/** @type {SVGElement} */ e) => {
+    if (on && !e.classList.contains('go') && e.dataset.sfx && e.dataset.at == null) {
+      setTimeout(() => { if (e.isConnected && pg === pages[cur]) trekSfx(e.dataset.sfx); }, (+e.dataset.wait || 0) * 1000);
+    }
+    e.classList.toggle('go', on);
+  });
 }
 // parts of move m (of the ones that take part in moves)
 const trekParts = (pg, m) => [...trekSc(pg).querySelectorAll(`.trek[data-m="${m}"], .trek-seat[data-m="${m}"], .trek-rival[data-m="${m}"]`)];
@@ -1082,7 +1088,7 @@ const trekOne = (pg, cls, m) => /** @type {SVGGElement} */ (trekSc(pg).querySele
 // ---------------- sound ----------------
 function trekSfx(file, gain = 0.8) {
   if (!file) return;
-  // @ts-ignore: sfx() is 故事大王/play.js's (it plays next to the voice); 逻辑世界 has none
+  // @ts-ignore: sfx() is shared/tale/play.js's (it plays next to the voice); 逻辑世界 has none
   if (typeof sfx === 'function') { sfx(file, gain); return; }
   say(null, file);
 }
@@ -1142,7 +1148,7 @@ function trekStart(pg, pz, m) {
   const mv = trekMoves(pz)[m], sc = trekSc(pg);
   pz.dataset.m = String(m);
   pz.dataset.k = '0';
-  ['over', 'acted', 'talking', 'queued', 'nudged', 'race', 'tap', 'busy'].forEach((k) => delete pz.dataset[k]);
+  ['over', 'acted', 'talking', 'queued', 'nudged', 'race', 'tap', 'busy', 'when'].forEach((k) => delete pz.dataset[k]);
   sc.querySelectorAll('.trek[data-m], .trek-seat[data-m], .trek-rival[data-m]').forEach((e) => e.classList.toggle('now', +e.dataset.m === m));
   trekGo(pg, `[data-on="${m}"]`);
   // what to do, in words: the 不会做？ button and the line under the work say it (move 0's is in the page's own sentences)
@@ -1179,16 +1185,21 @@ function trekIdle(pg, pz, m, mv) {
   const check = () => {
     if (!trekCur(pz, m) || pz.dataset.nudged) return;
     const idle = trekNow() - +pz.dataset.last;
-    if (pz.dataset.talking || pz.dataset.busy || trekHeld || idle < 8000) { setTimeout(check, 1000); return; }
+    if (pz.dataset.talking || pz.dataset.busy || trekHeld || trekReaching || trekShaking || idle < 8000) { setTimeout(check, 1000); return; }
     pz.dataset.nudged = '1';
     trekSay(pz, mv.intro || pz.dataset.hint, () => trekCur(pz, m));
   };
   setTimeout(check, 8000);
 }
-// the footprint button (and the walker) can be tapped: not while lines are said, nor once every step is walked
+// the footprint button (and the walker) can be tapped: not while lines are said, nor once every step is walked; a
+// tapManyButton not while lines are said, nor once its thing is full
 function trekButtons(pg, pz, m, mv) {
   const off = !!pz.dataset.talking || +pz.dataset.k >= (mv.n || 0) || pz.dataset.race === 'lost';
-  trekSc(pg).querySelectorAll(`.trek-btn[data-m="${m}"]`).forEach((b) => b.classList.toggle('off', off));
+  trekSc(pg).querySelectorAll(`.trek-btn[data-m="${m}"]:not(.trek-tapsbtn)`).forEach((b) => b.classList.toggle('off', off));
+  trekSc(pg).querySelectorAll(`.trek-tapsbtn[data-m="${m}"]`).forEach((/** @type {SVGGElement} */ b) => {
+    const t = trekTapsOf(pg, m, b.dataset.key);
+    b.classList.toggle('off', !!pz.dataset.talking || !t || t.classList.contains('full'));
+  });
 }
 
 // ---------------- step and race: a tap = one step ----------------
@@ -1215,7 +1226,7 @@ function trekStep(pg, pz, m, mv) {
   const pts = w.dataset.pts.split(' ').map((p) => p.split(',').map(Number)), to = pts[Math.min(k + 1, pts.length - 1)];
   const pace = mv.paces && mv.paces[k] != null ? mv.paces[k] : mv.pace;   // paces[k]: step k's own pace
   const quiet = mv.quietFrom != null && k >= mv.quietFrom;
-  w.style.transition = `transform ${pace}s ease-in-out`;
+  w.style.transition = `transform ${pace}s ${mv.ease || 'ease-in-out'}`;
   w.style.setProperty('--pace', `${pace}s`);
   trekReplay(w, 'stepping');
   w.style.transform = `translate(${to[0] - pts[0][0]}px, ${to[1] - pts[0][1]}px)`;
@@ -1355,11 +1366,176 @@ function trekRun(pg, pz, m, mv, el) {
   if (el.classList.contains('ran')) return;
   const body = /** @type {SVGGElement} */ (el.querySelector(':scope > .trek-body')), secs = parseFloat(body.style.transitionDuration) || 0.6;
   el.classList.add('ran');
-  body.style.transform = `translate(${el.dataset.dx}px, ${el.dataset.dy}px)`;
   trekSfx(mv.sfx);
+  if (el.dataset.back != null) return trekRunBack(pg, pz, m, el, body, secs);
+  body.style.transform = `translate(${el.dataset.dx}px, ${el.dataset.dy}px)`;
   if (el.dataset.map) trekMapTo(pg, '[data-maprival]', +el.dataset.map, secs, 0);
   trekDone(pg, pz, m, secs * 1000 + 300);
 }
+// runner o.back: up to peak of the way (slowing), then he falls back (quicker and quicker); done once he is down
+function trekRunBack(pg, pz, m, el, body, secs) {
+  const f = +el.dataset.back, up = secs * 0.55, down = secs - up;
+  pz.dataset.acted = '1';
+  body.style.transition = `transform ${up}s cubic-bezier(.2, .7, .4, 1)`;
+  body.style.transform = `translate(${+el.dataset.dx * f}px, ${+el.dataset.dy * f}px)`;
+  setTimeout(() => {
+    if (!trekCur(pz, m)) return;
+    el.classList.add('falling');
+    body.style.transition = `transform ${down}s cubic-bezier(.6, 0, .9, .6)`;
+    body.style.transform = 'translate(0px, 0px)';
+    setTimeout(() => {
+      if (!trekCur(pz, m)) return;
+      el.classList.remove('falling');
+      el.classList.add('fell');
+      trekDone(pg, pz, m, 500);
+    }, down * 1000);
+  }, up * 1000);
+}
+
+// ---------------- taps: each tapMany its n taps; all full = done ----------------
+const trekTapsOf = (pg, m, key) => /** @type {SVGGElement} */ ([...trekSc(pg).querySelectorAll(`.trek-taps[data-m="${m}"]`)].find((t) => t.dataset.key === key));
+// lines said after a tap (a shake, a stroke): .talking on el and data-while="m:tag" pieces meanwhile, nothing counts.
+// Resolves false if the move is left meanwhile (the page turned, put back)
+async function trekTold(pg, pz, m, mv, tag, said, el) {
+  pz.dataset.talking = tag;
+  el.classList.add('talking');
+  trekButtons(pg, pz, m, mv);
+  trekGo(pg, `[data-while="${m}:${tag}"]`);
+  for (const t of said) await trekSay(pz, t);
+  if (!trekCur(pz, m)) return false;
+  delete pz.dataset.talking;
+  el.classList.remove('talking');
+  trekGo(pg, `[data-while="${m}:${tag}"]`, false);
+  trekButtons(pg, pz, m, mv);
+  pz.dataset.last = String(trekNow());
+  return true;
+}
+async function trekTaps(pg, pz, m, mv, el) {
+  const key = el.dataset.key, n = +el.dataset.n, k = +el.dataset.hits + 1;
+  if (pz.dataset.talking || k > n || trekNow() - +(el.dataset.last || -1e9) < (mv.gap == null ? 300 : mv.gap)) return;
+  el.dataset.last = String(trekNow());
+  el.dataset.hits = String(k);
+  pz.dataset.acted = '1';
+  trekReplay(el, 'hit');
+  trekSfx(mv.sfx);
+  trekGo(pg, `[data-ev="${m}:${key}:${k}"]`);
+  if (k >= n) el.classList.add('full');
+  trekButtons(pg, pz, m, mv);
+  const said = mv.lines && mv.lines[`${key}:${k}`];
+  if (said && said.length && !(await trekTold(pg, pz, m, mv, `${key}:${k}`, said, el))) return;
+  if (k < n) return;
+  el.classList.add('heard');
+  trekGo(pg, `[data-told="${m}:${key}"]`);
+  if ([...trekSc(pg).querySelectorAll(`.trek-taps[data-m="${m}"]`)].every((t) => t.classList.contains('heard'))) trekDone(pg, pz, m, 400);
+}
+function trekTapsButton(pg, pz, m, mv, b) {
+  const t = trekTapsOf(pg, m, b.dataset.key);
+  if (!t || b.classList.contains('off')) return;
+  trekReplay(b, 'press');
+  trekTaps(pg, pz, m, mv, t);
+}
+
+// ---------------- shake, smooth: the shakes (strokes) counted up to n ----------------
+// one more: k of n, at least 250 ms after the last one, never while lines are said
+async function trekCount(pg, pz, m, mv, el, cls) {
+  const k = +pz.dataset.k + 1;
+  if (pz.dataset.talking || k > mv.n || trekNow() - +(pz.dataset.when || -1e9) < 250) return;
+  pz.dataset.k = String(k);
+  pz.dataset.when = String(trekNow());
+  pz.dataset.acted = '1';
+  trekReplay(el, cls);
+  trekSfx(mv.sfx);
+  if (mv.kind === 'smooth') trekSc(pg).style.setProperty('--calm', (k / mv.n).toFixed(3));
+  trekGo(pg, `[data-ev="${m}:${k}"]`);
+  const said = mv.lines && mv.lines[k];
+  if (said && said.length && !(await trekTold(pg, pz, m, mv, String(k), said, el))) return;
+  if (k >= mv.n) trekDone(pg, pz, m, 500);
+}
+// the finger on the shaker: the touch is one shake; then each turn left / right, 30 picture units on at least, one more
+/** @type {null | { pg: Element, pz: HTMLElement, m: number, mv: any, el: SVGGElement, ext: number, dir: number }} */
+let trekShaking = null;
+function trekShake(e, pg, pz, m, mv, el) {
+  trekShaking = { pg, pz, m, mv, el, ext: scenePoint(trekSc(pg), e).x, dir: 0 };
+  el.classList.add('held');
+  trekCount(pg, pz, m, mv, el, 'shook');
+}
+document.addEventListener('pointermove', (e) => {
+  const s = trekShaking;
+  if (!s) return;
+  const x = scenePoint(trekSc(s.pg), e).x;
+  if (s.dir * (x - s.ext) > 0) s.ext = x;   // on the same way: further
+  else if (Math.abs(x - s.ext) >= 30) {     // turned back (or the first way set: the touch was counted already)
+    const turned = s.dir !== 0;
+    s.dir = Math.sign(x - s.ext);
+    s.ext = x;
+    if (turned && trekCur(s.pz, s.m)) trekCount(s.pg, s.pz, s.m, s.mv, s.el, 'shook');
+  }
+});
+const trekShakeEnd = () => { if (trekShaking) { trekShaking.el.classList.remove('held'); trekShaking = null; } };
+document.addEventListener('pointerup', trekShakeEnd);
+document.addEventListener('pointercancel', trekShakeEnd);
+
+// ---------------- reach: the head dragged along its line, the neck after it ----------------
+/** @type {null | { pg: Element, pz: HTMLElement, m: number, mv: any, el: SVGGElement, from: DOMPoint, t0: number }} */
+let trekReaching = null;
+const trekReachLine = (/** @type {SVGGElement} */ el) => ['x', 'y', 'tx', 'ty', 'r'].map((k) => +el.dataset[k]);
+// where the neck's --reach goes: the reacher's ancestor matching data-rig, else the first in the picture, else the picture
+function trekRig(pg, el) {
+  const sel = el.dataset.rig, sc = trekSc(pg);
+  return /** @type {SVGElement} */ ((sel && (el.closest(sel) || sc.querySelector(sel))) || sc);
+}
+// the head at t (0–1) of its line, the neck with it
+function trekReachAt(pg, el, t) {
+  const [x, y, tx, ty] = trekReachLine(el), head = /** @type {SVGGElement} */ (el.querySelector(':scope > .trek-head'));
+  el.dataset.t = t.toFixed(4);
+  head.style.transform = `translate(${((tx - x) * t).toFixed(1)}px, ${((ty - y) * t).toFixed(1)}px)`;
+  trekRig(pg, el).style.setProperty('--reach', t.toFixed(4));
+}
+// the head goes on its own from where it is to t in secs (slowing at the end); a new touch stops it
+function trekReachTo(pg, el, t, secs) {
+  const token = String(trekNow()), from = +(el.dataset.t || 0), t0 = trekNow();
+  el.dataset.tween = token;
+  const tick = () => {
+    if (!el.isConnected || el.dataset.tween !== token) return;
+    const f = Math.min(1, (trekNow() - t0) / (secs * 1000)), e = 1 - (1 - f) * (1 - f);
+    trekReachAt(pg, el, from + (t - from) * e);
+    if (f < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+function trekReachGrab(e, pg, pz, m, mv, el) {
+  if (el.classList.contains('reached')) return;
+  delete el.dataset.tween;
+  el.classList.add('held');
+  pz.dataset.acted = '1';
+  trekReaching = { pg, pz, m, mv, el, from: scenePoint(trekSc(pg), e), t0: +(el.dataset.t || 0) };
+}
+document.addEventListener('pointermove', (e) => {
+  const h = trekReaching;
+  if (!h) return;
+  const [x, y, tx, ty] = trekReachLine(h.el), p = scenePoint(trekSc(h.pg), e), dx = tx - x, dy = ty - y;
+  // where the finger has carried the head (from where it was grabbed), put back on the line
+  const qx = dx * h.t0 + p.x - h.from.x, qy = dy * h.t0 + p.y - h.from.y;
+  trekReachAt(h.pg, h.el, Math.min(1, Math.max(0, (qx * dx + qy * dy) / (dx * dx + dy * dy || 1))));
+});
+const trekReachLetGo = (/** @type {PointerEvent} */ e) => {
+  const h = trekReaching;
+  if (!h) return;
+  trekReaching = null;
+  const { pg, pz, m, mv, el } = h, [x, y, tx, ty, r] = trekReachLine(el), t = +(el.dataset.t || 0);
+  el.classList.remove('held');
+  pz.dataset.last = String(trekNow());
+  if (e.type === 'pointerup' && trekCur(pz, m) && (1 - t) * Math.hypot(tx - x, ty - y) <= r) {
+    el.classList.add('reached');
+    trekReachTo(pg, el, 1, 0.25);
+    trekSfx(mv.sfx);
+    return trekDone(pg, pz, m, 500);
+  }
+  trekReachTo(pg, el, 0, 0.3 + t * 0.9);   // slowly back down
+  if (trekCur(pz, m) && mv.miss && t > 0.02) { stop(); trekSay(pz, mv.miss); }
+};
+document.addEventListener('pointerup', trekReachLetGo);
+document.addEventListener('pointercancel', trekReachLetGo);
 
 // ---------------- drag: the rider onto the seat ----------------
 /** @type {null | { pg: Element, pz: HTMLElement, m: number, mv: any, el: SVGGElement, from: DOMPoint }} */
@@ -1520,12 +1696,17 @@ document.addEventListener('pointerdown', (e) => {
   if (!pg.classList.contains('asking') || pg.classList.contains('solved') || pz.dataset.over || !el) return trekNope(touched);
   const mv = trekMoves(pz)[m];
   pz.dataset.last = String(trekNow());
+  if (el.matches('.trek-tapsbtn')) return mv.kind === 'taps' ? trekTapsButton(pg, pz, m, mv, el) : undefined;
   if (el.matches('.trek-walker, .trek-btn, .trek-leaf')) return mv.kind === 'step' || mv.kind === 'race' ? trekTap(pg, pz, m, mv) : undefined;
   if (el.matches('.trek-runner')) return trekRun(pg, pz, m, mv, el);
   if (el.matches('.trek-tapone')) return trekTapOne(pg, pz, m, mv, el);
   if (el.matches('.trek-rider')) return trekGrab(e, pg, pz, m, mv, el);
   if (el.matches('.trek-flag')) return trekFlag(pg, pz, m, mv, el);
   if (el.matches('.trek-card')) return trekCard(pg, pz, m, mv, el);
+  if (el.matches('.trek-taps')) return trekTaps(pg, pz, m, mv, el);
+  if (el.matches('.trek-shaker')) return trekShake(e, pg, pz, m, mv, el);
+  if (el.matches('.trek-smooth')) return trekCount(pg, pz, m, mv, el, 'stroked');
+  if (el.matches('.trek-reach')) return trekReachGrab(e, pg, pz, m, mv, el);
 });
 // the clicks that follow those touches are the trek's (a tap on the picture must not read a sentence); the line under the
 // work says what to do

@@ -435,6 +435,34 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .trek-card.now:not(.open) { animation: trek-float 3.2s ease-in-out infinite; }
 .trek-card.nope { transform-box: view-box; }
 .trek-card.shutting, .trek-card.shutting * { pointer-events: none !important; }
+/* a thing tapped n times: glowing until full; it jumps at every tap, and grows a little while its lines are said */
+.trek-taps .halo { opacity: 0; transition: opacity .3s; }
+.trek-taps.now:not(.full) .halo { opacity: .75; animation: trek-glow 1.2s ease-in-out infinite; }
+.trek-taps .trek-hit { transform-box: fill-box; transform-origin: 50% 100%; transition: scale .3s; }
+.trek-taps.hit .trek-hit { animation: trek-jolt .35s ease-out; }
+.trek-taps.talking .trek-hit { scale: 1.08; }
+
+/* the shaker: glowing while it is his turn, he shakes at every shake; the left-right arrows flash until he is done */
+.trek-shaker .halo { opacity: 0; transition: opacity .3s; }
+.trek-shaker.now .halo { opacity: .6; animation: trek-glow 1.2s ease-in-out infinite; }
+.trek-shaker .trek-shake { transform-box: fill-box; transform-origin: 50% 90%; }
+.trek-shaker.shook .trek-shake { animation: trek-shake .45s ease-in-out; }
+.trek-arrows { opacity: 0; transition: opacity .2s; }
+.trek-shaker.now:not(.held) .trek-arrows { opacity: 1; }
+.trek-arrows .al { animation: trek-arrow-l .8s ease-in-out infinite; }
+.trek-arrows .ar { animation: trek-arrow .8s ease-in-out infinite; }
+
+/* the water to smooth shimmers faintly while it is its turn (and flashes at a stroke) */
+.trek-smooth .halo { opacity: 0; transition: opacity .3s; }
+.trek-smooth.now .halo { animation: trek-shimmer 2.4s ease-in-out infinite; }
+.trek-smooth.stroked .halo { animation: trek-stroke .5s ease-out; }
+
+/* the head dragged up (reach): its arrow flashes until the finger takes it; lifted a little while held */
+.trek-reach .trek-head { will-change: transform; }
+.trek-reach.held .trek-head > g { filter: drop-shadow(0 6px 4px rgba(0,0,0,.25)); }
+.trek-reach .trek-arrow { opacity: 0; transition: opacity .2s; }
+.trek-reach.now:not(.held):not(.reached) .trek-arrow { opacity: 1; animation: trek-arrow .8s ease-in-out infinite; }
+.trek-reach.reached, .trek-reach.reached * { pointer-events: none !important; }
 /* (a step too fast in the quiet stretch adds .twitch to every .hare-ear-twitch: the drawing, 龟兔赛跑/common.js, twitches it) */
 
 @keyframes trek-glow { 0%, 100% { opacity: .85; } 50% { opacity: .35; } }
@@ -449,8 +477,13 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 @keyframes trek-wave { 25% { rotate: -9deg; } 75% { rotate: 7deg; } }
 @keyframes trek-pop { 40% { scale: 1.45; } }
 @keyframes trek-float { 50% { translate: 0 -8px; } }
+@keyframes trek-jolt { 30% { scale: 1.12 .9; rotate: -4deg; } 65% { scale: .96 1.05; rotate: 3deg; } }
+@keyframes trek-shake { 15% { rotate: -7deg; scale: 1.06; } 35% { rotate: 6deg; } 55% { rotate: -5deg; } 75% { rotate: 3deg; } }
+@keyframes trek-arrow-l { 50% { translate: -14px 0; } }
+@keyframes trek-shimmer { 0%, 100% { opacity: 0; } 50% { opacity: .22; } }
+@keyframes trek-stroke { 0% { opacity: .45; } 100% { opacity: 0; } }
 
-/* 故事大王: what the fairy tales add to the picture book's look (../shared/reader/story.css, loaded first):
+/* 故事大王: what the fairy tales add to the picture book's look (../reader/story.css, loaded first):
    the interactions of tale.js / play.js — build, tapwind, told */
 
 /* ---- build ---- */
