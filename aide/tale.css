@@ -303,6 +303,23 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 [data-fuel] .lit { opacity: 0; transition: opacity .35s; }
 [data-fuel].on .lit { opacity: 1; }
 
+/* trek move 'pull' (pull.js draws it, pull.play.js plays it). The ring pulses by --beat (0 … 1, set every frame); the newest
+   helper's segment is scaled by --fill (left to right); a tap flashes the gap */
+.pull-ring { transform-box: fill-box; transform-origin: 50% 50%; transform: scale(calc(.82 + .3 * var(--beat, .5))); pointer-events: none; }
+.pull-halo { opacity: calc(var(--beat, .5) * .9); }
+.pull-dot { opacity: calc(.45 + .55 * var(--beat, .5)); }
+.pull-fill { transform-box: fill-box; transform-origin: 0% 50%; transform: scaleX(var(--fill, 0)); }
+.pull-bar, .pull-goal { pointer-events: none; }
+.trek-pull.was .pull-ring { opacity: 0; transition: opacity .5s; }
+.trek-pull:not(.now) .pull-ring { opacity: 0; }
+.trek-pull.now .pull-ring { opacity: 1; }
+.pull-gap { animation: pull-gap 1.1s ease-in-out infinite; }
+.pull-gapflash .pull-gap { animation: pull-gapflash .45s ease-out; }
+@keyframes pull-gap { 0%, 100% { stroke-opacity: .35; } 50% { stroke-opacity: 1; } }
+@keyframes pull-gapflash { 0% { fill: #ffe27a; fill-opacity: 1; stroke-width: 9; } 100% { fill-opacity: .6; stroke-width: 4; } }
+.trek-pull.hit .pull-goal { animation: pull-pop .35s ease-out; }
+@keyframes pull-pop { 40% { transform: scale(1.25); } }
+
 /* puzzles 'tap', 'give', 'hold', 'steps' (puzzles/steps.js): what the four share. Joined into story.css for 逻辑世界 too,
    so every rule names a pz- class of its own. */
 

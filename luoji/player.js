@@ -833,6 +833,76 @@ PUZZLE_DROP.pour = (pg, d, b) => {
   else { stop(); say(pz.dataset.lines.split('|')[n] || '对啦！'); }
 };
 
+// Playing the trek move 'pull' (written by pull.js; the move: TrekPull in shared/types.d.ts), loaded after trek.play.js, whose
+// trekStart calls pullArm. A tap anywhere on the page (but its buttons) is one "嘿哟": on the beat (the ring bright: ±300 ms of
+// each full second) it fills 1/n of the newest helper's slot, off the beat half of that; the n-th tap fills the slot and ends the
+// move. Never fails. A bar that is left alone drains back slowly (3 s after the last tap, to the start of the newest slot, never
+// further). What it sets on the picture: see pull.js. 8 s alone: trek's own idle line (the move's intro, else the hint), once.
+// The state is on the page (data-k, the --fill on the scene, classes): a page opened again starts over (player.js fresh()).
+
+const PULL_PERIOD = 1000, PULL_WINDOW = 300, PULL_DRAIN_AFTER = 3000, PULL_DRAIN = 0.06;
+/** @type {WeakMap<Element, { m: number, v: number, t0: number, last: number, k: number, frameAt: number }>} */
+const pulls = new WeakMap();
+const pullIsMove = (/** @type {HTMLElement} */ pz) => { const mv = trekMoves(pz)[+pz.dataset.m]; return !!mv && mv.kind === 'pull'; };
+// the move starts: state, the ring's loop
+/** @param {Element} pg @param {HTMLElement} pz @param {number} m @param {any} mv */
+function pullArm(pg, pz, m, mv) {
+  const st = { m, v: 0, t0: performance.now(), last: performance.now(), k: 0, frameAt: 0 };
+  pulls.set(pz, st);
+  const sc = trekSc(pg);
+  sc.style.setProperty('--fill', '0');
+  sc.style.setProperty('--pull', '0');
+  sc.dataset.pulls = '0';
+  const frame = () => {
+    if (!trekCur(pz, m) || pulls.get(pz) !== st) return;
+    const now = performance.now(), dt = Math.min(0.1, (now - (st.frameAt || now)) / 1000);
+    st.frameAt = now;
+    const p = ((now - st.t0) % PULL_PERIOD) / PULL_PERIOD, ring = /** @type {HTMLElement | null} */ (pg.querySelector(`.trek-pull[data-m="${m}"] .pull-ring`));
+    if (ring) ring.style.setProperty('--beat', (0.5 + 0.5 * Math.cos(2 * Math.PI * p)).toFixed(3));
+    if (mv.grow !== false && st.k < mv.n && st.v > 0 && now - st.last > PULL_DRAIN_AFTER) {
+      st.v = Math.max(0, st.v - PULL_DRAIN * dt);
+      sc.style.setProperty('--fill', st.v.toFixed(3));
+    }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+// is the moment t (ms) on the beat?
+const pullOnBeat = (/** @type {number} */ t, /** @type {number} */ t0) => { const ph = (t - t0) % PULL_PERIOD; return ph < PULL_WINDOW || ph > PULL_PERIOD - PULL_WINDOW; };
+document.addEventListener('pointerdown', (e) => {
+  const pg = pages[cur], pz = /** @type {HTMLElement} */ (pg && P(pg)), t = /** @type {Element} */ (e.target);
+  if (!pz || pz.dataset.type !== 'trek' || pg.classList.contains('solved') || !pg.contains(t) || t.closest('button, .pager, .trek-how')) return;
+  if (!pz.dataset.started) {   // a tap before the voice has asked starts the work (first move only), and counts
+    if (trekMoves(pz)[0].kind !== 'pull') return;
+    stop();
+    const list = beats(pg), first = list.findIndex((b) => b.classList.contains('after')), upto = first < 0 ? list.length : first;
+    pg.querySelectorAll('svg.scene [data-at]').forEach((x) => { if (+x.getAttribute('data-at') < upto && !x.classList.contains('go')) x.classList.add('go', 'q'); });
+    startPuzzle(pg);
+  }
+  if (!pg.classList.contains('asking') || pz.dataset.over || !pullIsMove(pz)) return;
+  const m = +pz.dataset.m, mv = trekMoves(pz)[m], st = pulls.get(pz);
+  if (!st || st.m !== m || st.k >= mv.n) return;
+  e.preventDefault();
+  const now = performance.now(), on = pullOnBeat(now, st.t0), sc = trekSc(pg), part = sc.querySelector(`.trek-pull[data-m="${m}"]`);
+  st.k++;
+  st.last = now;
+  pz.dataset.last = String(now);
+  pz.dataset.k = String(st.k);
+  pz.dataset.acted = '1';
+  if (mv.grow !== false) st.v = st.k >= mv.n ? 1 : Math.min(1, st.v + (on ? 1 : 0.5) / mv.n);
+  sc.style.setProperty('--fill', st.v.toFixed(3));
+  sc.style.setProperty('--pull', (st.k / mv.n).toFixed(3));
+  sc.dataset.pulls = String(st.k);
+  trekReplay(sc, 'tug');
+  if (part) { trekReplay(part, 'hit'); const bar = part.querySelector('.pull-bar'); if (bar) trekReplay(bar, 'pull-gapflash'); }
+  trekSfx(mv.sfx, on ? 0.85 : 0.5);
+  trekGo(pg, `[data-ev="${m}:${st.k}"]`);
+  if (st.k >= mv.n) setTimeout(() => { if (trekCur(pz, m)) trekDone(pg, pz, m, 700); }, 800);
+}, true);
+// the clicks after those taps are the move's: a tap on the picture must not read a sentence
+const pullOldTap = PUZZLE_TAP.trek;
+PUZZLE_TAP.trek = (pg, t) => { const pz = /** @type {HTMLElement} */ (P(pg)); return (pz && pz.dataset.started && !pz.dataset.over && pullIsMove(pz) && !t.closest('button, .trek-how')) || pullOldTap(pg, t); };
+
 // Playing the puzzles 'tap', 'give', 'hold' and 'steps' (written by tap.js, give.js, hold.js, steps.js), loaded after
 // player.js. This file is what the four share; tap.play.js, give.play.js and hold.play.js play their own things and
 // need it. A tap / give / hold puzzle is a 'steps' puzzle of one step: the steps are in the block's data-steps.
@@ -1083,8 +1153,8 @@ const trekReplay = (el, c) => { el.classList.remove(c); el.getBoundingClientRect
 // beat's sound is play.js's) plays it as it moves, data-wait seconds later
 function trekGo(pg, sel, on = true) {
   trekSc(pg).querySelectorAll(sel).forEach((/** @type {SVGElement} */ e) => {
-    if (on && !e.classList.contains('go') && e.dataset.sfx && e.dataset.at == null) {
-      setTimeout(() => { if (e.isConnected && pg === pages[cur]) trekSfx(e.dataset.sfx); }, (+e.dataset.wait || 0) * 1000);
+    if (on && !e.classList.contains('go') && (e.dataset.sfx || e.dataset.shout) && e.dataset.at == null) {
+      setTimeout(() => { if (e.isConnected && pg === pages[cur]) trekSfx(e.dataset.sfx || e.dataset.shout); }, (+e.dataset.wait || 0) * 1000);
     }
     e.classList.toggle('go', on);
   });
@@ -1096,6 +1166,8 @@ const trekOne = (pg, cls, m) => /** @type {SVGGElement} */ (trekSc(pg).querySele
 // ---------------- sound ----------------
 function trekSfx(file, gain = 0.8) {
   if (!file) return;
+  // a sfx that is not a file is a spoken line (汪汪, 嘿哟): its recording
+  if (!/\.m4a$/.test(file)) { const w = typeof VOICE_FILES !== 'undefined' && VOICE_FILES[file]; if (!w) return; file = w; }
   // @ts-ignore: sfx() is shared/tale/play.js's (it plays next to the voice); 逻辑世界 has none
   if (typeof sfx === 'function') { sfx(file, gain); return; }
   say(null, file);
@@ -1165,6 +1237,7 @@ function trekStart(pg, pz, m) {
   if (told) { told.setAttribute('data-say', how); told.textContent = how; }
   if (m > 0 && mv.intro) trekSay(pz, mv.intro, () => trekCur(pz, m) && !pz.dataset.acted);
   if (mv.kind === 'race') trekRaceArm(pg, pz, m, mv, true);
+  if (mv.kind === 'pull') pullArm(pg, pz, m, mv);   // pull.play.js
   trekButtons(pg, pz, m, mv);
   trekIdle(pg, pz, m, mv);
 }
@@ -1434,7 +1507,7 @@ async function trekTaps(pg, pz, m, mv, el) {
   if (k < n) return;
   el.classList.add('heard');
   trekGo(pg, `[data-told="${m}:${key}"]`);
-  if ([...trekSc(pg).querySelectorAll(`.trek-taps[data-m="${m}"]`)].every((t) => t.classList.contains('heard'))) trekDone(pg, pz, m, 400);
+  if (mv.any || [...trekSc(pg).querySelectorAll(`.trek-taps[data-m="${m}"]`)].every((t) => t.classList.contains('heard'))) trekDone(pg, pz, m, 400);
 }
 function trekTapsButton(pg, pz, m, mv, b) {
   const t = trekTapsOf(pg, m, b.dataset.key);
@@ -1484,7 +1557,7 @@ document.addEventListener('pointerup', trekShakeEnd);
 document.addEventListener('pointercancel', trekShakeEnd);
 
 // ---------------- reach: the head dragged along its line, the neck after it ----------------
-/** @type {null | { pg: Element, pz: HTMLElement, m: number, mv: any, el: SVGGElement, from: DOMPoint, t0: number }} */
+/** @type {null | { pg: Element, pz: HTMLElement, m: number, mv: any, el: SVGGElement, from: DOMPoint, t0: number, tGrab: number }} */
 let trekReaching = null;
 const trekReachLine = (/** @type {SVGGElement} */ el) => ['x', 'y', 'tx', 'ty', 'r'].map((k) => +el.dataset[k]);
 // where the neck's --reach goes: the reacher's ancestor matching data-rig, else the first in the picture, else the picture
@@ -1516,7 +1589,7 @@ function trekReachGrab(e, pg, pz, m, mv, el) {
   delete el.dataset.tween;
   el.classList.add('held');
   pz.dataset.acted = '1';
-  trekReaching = { pg, pz, m, mv, el, from: scenePoint(trekSc(pg), e), t0: +(el.dataset.t || 0) };
+  trekReaching = { pg, pz, m, mv, el, from: scenePoint(trekSc(pg), e), t0: +(el.dataset.t || 0), tGrab: trekNow() };
 }
 document.addEventListener('pointermove', (e) => {
   const h = trekReaching;
@@ -1533,14 +1606,15 @@ const trekReachLetGo = (/** @type {PointerEvent} */ e) => {
   const { pg, pz, m, mv, el } = h, [x, y, tx, ty, r] = trekReachLine(el), t = +(el.dataset.t || 0);
   el.classList.remove('held');
   pz.dataset.last = String(trekNow());
-  if (e.type === 'pointerup' && trekCur(pz, m) && (1 - t) * Math.hypot(tx - x, ty - y) <= r) {
+  const fast = !!mv.minSecs && (trekNow() - h.tGrab) / 1000 < mv.minSecs;   // dragged too quickly (the yarn ball, 拔萝卜 第 8 幕)
+  if (e.type === 'pointerup' && trekCur(pz, m) && (1 - t) * Math.hypot(tx - x, ty - y) <= r && !fast) {
     el.classList.add('reached');
     trekReachTo(pg, el, 1, 0.25);
     trekSfx(mv.sfx);
     return trekDone(pg, pz, m, 500);
   }
   trekReachTo(pg, el, 0, 0.3 + t * 0.9);   // slowly back down
-  if (trekCur(pz, m) && mv.miss && t > 0.02) { stop(); trekSay(pz, mv.miss); }
+  if (trekCur(pz, m) && (fast ? mv.fast : mv.miss) && t > 0.02) { stop(); trekSay(pz, fast ? mv.fast : mv.miss); }
 };
 document.addEventListener('pointerup', trekReachLetGo);
 document.addEventListener('pointercancel', trekReachLetGo);
